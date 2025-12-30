@@ -1,0 +1,11 @@
+# Enable rewrites
+RewriteEngine On
+RewriteBase /
+
+# Serve existing files/directories directly
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Route everything else through router.php
+RewriteRule ^ index.php [L,QSA]
