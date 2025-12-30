@@ -1,0 +1,16 @@
+.post-excerpt {
+    color: var(--sw-text-soft);
+    font-size: 1.05rem;
+}
+
+.post-meta {
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    color: var(--sw-text-muted);
+    text-transform: uppercase;
+}
+
+.post-meta .post-sep {
+    margin: 0 0.35rem;
+    opacity: 0.6;
+}

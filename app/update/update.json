@@ -1,0 +1,8 @@
+{
+  "channel": "stable",
+  "manifest_url": "https://version.chaoscms.org/db/version.json",
+  "package_base_url": "https://version.chaoscms.org/db/packages",
+  "timeout_seconds": 10,
+  "backup_enabled": 1,
+  "max_backups": 3
+}

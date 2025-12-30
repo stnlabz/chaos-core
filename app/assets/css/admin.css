@@ -1,0 +1,103 @@
+/* -----------------------------------------------------------
+   Chaos CMS — Admin Core Styles
+   This stylesheet is *theme-independent* and always loaded.
+----------------------------------------------------------- */
+
+/* Base layout */
+body.admin {
+    background: #111;
+    color: #ddd;
+    font-family: system-ui, sans-serif;
+}
+
+/* Header & top bar */
+.admin-topbar {
+    background: #1a1a1a;
+    padding: 1rem 2rem;
+    border-bottom: 1px solid #333;
+}
+
+.admin-topbar h1 {
+    margin: 0;
+    font-size: 1.4rem;
+    color: #fff;
+}
+
+/* Top-right button group */
+.admin-top-actions {
+    text-align: right;
+    margin-bottom: 1.5rem;
+}
+
+.admin-top-actions a {
+    margin-left: 0.5rem;
+}
+
+/* Containers */
+.admin-container {
+    padding: 2rem;
+}
+
+/* Cards */
+.admin-card {
+    background: #1b1b1b;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+    transition: 0.2s ease;
+}
+
+.admin-card:hover {
+    border-color: #666;
+}
+
+/* Gothic-witchy subtle glow (light touch, not theme-breaking) */
+.admin-card:hover {
+    box-shadow: 0 0 10px rgba(160, 0, 255, 0.3);
+}
+
+/* Bottom quick links */
+.admin-bottom-links {
+    margin-top: 1.5rem;
+}
+
+.admin-bottom-links a {
+    margin-right: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Buttons */
+.admin-btn {
+    background: #222;
+    border: 1px solid #444;
+    color: #ddd;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.admin-btn:hover {
+    background: #333;
+    border-color: #666;
+    color: #fff;
+}
+
+/* Table styling (for users, posts, etc.) */
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+}
+
+.admin-table th,
+.admin-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #333;
+}
+
+.admin-table th {
+    background: #222;
+}
+

@@ -1,0 +1,82 @@
+/* ==========================================================
+   Chaos CMS — Timezones Plugin
+   Centered utility bar
+   ========================================================== */
+
+.tzbar {
+    width: 100%;
+    background: rgba(5, 5, 9, 0.85);
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* ✅ This is what centers it */
+.tzbar-inner {
+    max-width: 960px;          /* match your site container */
+    margin: 0 auto;            /* centers container */
+    padding: 0.5rem 1.5rem;    /* match nav padding */
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    box-sizing: border-box;
+}
+
+.tzbar-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.tzbar-label {
+    font-size: 0.70rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.tzbar-time {
+    font-size: 0.90rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.92);
+    white-space: nowrap;
+}
+
+.tzbar-sep {
+    width: 1px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* Local time + meta inline */
+.tzbar-local-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.tzbar-meta {
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.70);
+    white-space: nowrap;
+}
+
+/* ----------------------------------------------------------
+   Responsive
+   ---------------------------------------------------------- */
+@media (max-width: 640px) {
+    .tzbar-inner {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        padding: 0.5rem 1rem;
+    }
+
+    .tzbar-sep {
+        display: none;
+    }
+}
+.tzbar-inner {
+    margin-left: auto !important;
+    margin-right: auto !important;
+    max-width: 960px !important;
+}

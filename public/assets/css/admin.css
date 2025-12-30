@@ -1,0 +1,799 @@
+:root{
+  --admin-bg:#0f1116;
+  --admin-surface:#141824;
+  --admin-card-bg:#151b2a;
+  --admin-border:rgba(255,255,255,.08);
+  --admin-text:#e9edf5;
+  --admin-muted:#a7a7b3;
+  --admin-focus:#6ea8fe;
+  --admin-ok:#2ecc71;
+  --admin-warn:#f1c40f;
+  --admin-bad:#e74c3c;
+  --admin-radius:14px;
+  --admin-gap:12px;
+  --admin-shadow:0 10px 30px rgba(0,0,0,.35);
+}
+
+*{ box-sizing:border-box; }
+
+body{
+  min-height:100%;
+  background:var(--admin-bg) !important;
+  color:var(--admin-text) !important;
+}
+
+a{ color:inherit; }
+
+.admin-wrap{
+  color:var(--admin-text);
+}
+
+.admin-wrap .container{
+  max-width:1200px;
+  padding:18px 16px;
+}
+
+/* Dashboard cards */
+.admin-wrap .card{
+  background: var(--admin-card-bg);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  box-shadow: var(--admin-shadow);
+  overflow: hidden;
+}
+
+.admin-wrap .card-body{
+  padding: 14px;
+}
+
+/* Make the “Open” links look like buttons consistently */
+.admin-wrap .btn{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--admin-border);
+  background: rgba(255,255,255,.04);
+  color: var(--admin-text);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.admin-wrap .btn:hover{
+  background: rgba(255,255,255,.07);
+  text-decoration: none;
+}
+
+.admin-wrap hr{
+  border: 0;
+  height: 1px;
+  background: rgba(255,255,255,.10);
+  margin: 16px 0;
+}
+
+.admin-wrap .admin-title{
+  margin:0 0 6px;
+  font-size:1.5rem;
+  letter-spacing:-0.01em;
+}
+
+.admin-wrap .admin-subtitle{
+  margin:0 0 10px;
+  color:var(--admin-muted);
+  font-size:.95rem;
+}
+
+.admin-wrap .admin-nav{
+  background:linear-gradient(180deg, rgba(20,24,36,.98), 
+rgba(16,19,28,.96));
+  border-bottom:1px solid var(--admin-border);
+  position:sticky;
+  top:0;
+  z-index:100;
+  backdrop-filter:saturate(140%) blur(8px);
+}
+
+.admin-wrap .admin-nav-inner{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:12px 16px;
+  max-width:1200px;
+  margin:0 auto;
+}
+
+.admin-wrap .admin-brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-weight:800;
+  letter-spacing:.02em;
+}
+
+.admin-wrap .admin-brand .dot{
+  width:10px;
+  height:10px;
+  border-radius:999px;
+  background:#6ea8fe;
+  box-shadow:0 0 0 3px rgba(110,168,254,.2);
+}
+
+.admin-wrap .admin-menu{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.admin-wrap .admin-link{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  text-decoration:none;
+  padding:7px 10px;
+  border-radius:999px;
+  border:1px solid transparent;
+  color:var(--admin-muted);
+  font-weight:650;
+  font-size:.92rem;
+}
+
+.admin-wrap .admin-link:hover{
+  color:var(--admin-text);
+  border-color:var(--admin-border);
+  background:rgba(255,255,255,.03);
+}
+
+.admin-wrap .admin-link.is-active{
+  color:var(--admin-text);
+  border-color:rgba(110,168,254,.35);
+  background:rgba(110,168,254,.12);
+}
+
+.admin-wrap .admin-btn,
+.admin-wrap .btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  padding:8px 12px;
+  border-radius:12px;
+  text-decoration:none;
+  border:1px solid var(--admin-border);
+  background:rgba(255,255,255,.03);
+  color:var(--admin-text);
+  font-weight:750;
+}
+
+.admin-wrap .admin-btn:hover,
+.admin-wrap .btn:hover{
+  background:rgba(255,255,255,.06);
+}
+
+.admin-wrap .btn-sm{
+  padding:6px 10px;
+  font-size:.88rem;
+  border-radius:10px;
+}
+
+.admin-wrap .btn-primary{
+  background:rgba(110,168,254,.18);
+  border-color:rgba(110,168,254,.35);
+  color:#eaf1ff;
+}
+
+.admin-wrap .btn-primary:hover{
+  background:rgba(110,168,254,.24);
+}
+
+.admin-wrap .btn-outline{
+  background:rgba(255,255,255,.02);
+  border-color:var(--admin-border);
+  color:var(--admin-text);
+}
+
+.admin-wrap .btn-outline:hover{
+  background:rgba(255,255,255,.05);
+}
+
+.admin-wrap .admin-toolbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin:12px 0 14px;
+}
+
+.admin-wrap .admin-toolbar h1{
+  margin:0;
+  font-size:1.25rem;
+}
+
+.admin-wrap table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  background:var(--admin-card-bg);
+  border:1px solid var(--admin-border);
+  border-radius:var(--admin-radius);
+  overflow:hidden;
+}
+
+.admin-wrap th,
+.admin-wrap td{
+  padding:10px 12px;
+  border-bottom:1px solid rgba(255,255,255,.06);
+  vertical-align:top;
+}
+
+.admin-wrap th{
+  color:var(--admin-muted);
+  font-weight:800;
+  font-size:.85rem;
+  letter-spacing:.02em;
+  background:rgba(255,255,255,.02);
+}
+
+.admin-wrap tbody tr:last-child td{
+  border-bottom:none;
+}
+
+.admin-wrap tbody tr:hover{
+  background:rgba(255,255,255,.03);
+}
+
+.admin-wrap .text-end{ text-align:right; }
+
+.admin-wrap input[type="text"],
+.admin-wrap input[type="email"],
+.admin-wrap input[type="password"],
+.admin-wrap input[type="search"],
+.admin-wrap input[type="url"],
+.admin-wrap textarea,
+.admin-wrap select{
+  width:100%;
+  padding:9px 10px;
+  border-radius:10px;
+  border:1px solid var(--admin-border);
+  background:rgba(255,255,255,.03);
+  color:var(--admin-text);
+}
+
+.admin-wrap textarea{
+  min-height:180px;
+  resize:vertical;
+}
+
+.admin-wrap input::placeholder,
+.admin-wrap textarea::placeholder{
+  color:rgba(167,167,179,.75);
+}
+
+.admin-wrap input:focus,
+.admin-wrap textarea:focus,
+.admin-wrap select:focus{
+  outline:2px solid var(--admin-focus);
+  outline-offset:1px;
+}
+
+.admin-wrap label{
+  display:block;
+  margin:0 0 6px;
+  color:var(--admin-muted);
+  font-size:.9rem;
+}
+
+.admin-wrap .form-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:var(--admin-gap);
+}
+
+.admin-wrap .form-col{
+  flex:1 1 260px;
+  min-width:260px;
+}
+
+.admin-wrap .admin-card{
+  background:var(--admin-card-bg);
+  border:1px solid var(--admin-border);
+  border-radius:var(--admin-radius);
+  box-shadow:var(--admin-shadow);
+  padding:14px;
+}
+
+.admin-wrap .admin-card h3{
+  margin:0 0 8px;
+  font-size:1.05rem;
+}
+
+.admin-wrap .admin-kpi{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:10px;
+}
+
+.admin-wrap .admin-kpi .num{
+  font-size:1.55rem;
+  font-weight:800;
+}
+
+.admin-wrap .admin-kpi .lbl{
+  color:var(--admin-muted);
+  font-size:.9rem;
+}
+
+/* Center admin content container */
+.admin-wrap .container{
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.health-row{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  padding:10px 12px;
+  border-radius:var(--admin-radius);
+  border:1px solid var(--admin-border);
+  background:var(--admin-surface);
+  color:var(--admin-text);
+  font-size:14px;
+}
+
+.health-row + .health-row{
+  margin-top:10px;
+}
+
+.health-row strong{
+  min-width:56px;
+  text-align:center;
+  font-weight:800;
+  font-size:12px;
+  padding:3px 7px;
+  border-radius:8px;
+  border:1px solid var(--admin-border);
+}
+
+.health-row.ok{
+  border-left:4px solid var(--admin-ok);
+}
+
+.health-row.ok strong{
+  border-color:rgba(46,204,113,.55);
+  background:rgba(46,204,113,.16);
+  color:#bff5d3;
+}
+
+.health-row.bad{
+  border-left:4px solid var(--admin-bad);
+}
+
+.health-row.bad strong{
+  border-color:rgba(231,76,60,.55);
+  background:rgba(231,76,60,.16);
+  color:#ffd0cc;
+}
+
+.health-row.warn{
+  border-left:4px solid var(--admin-warn);
+}
+
+.health-row.warn strong{
+  border-color:rgba(241,196,15,.55);
+  background:rgba(241,196,15,.14);
+  color:#ffe9a8;
+}
+
+.health-label{
+  font-weight:700;
+}
+
+.admin-help{
+  margin-top:3px;
+  font-size:12px;
+  color:var(--admin-muted);
+}
+
+.admin-wrap .version-status{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  margin-top:8px;
+}
+
+.admin-wrap .version-status .pill{
+  display:inline-flex;
+  align-items:center;
+  padding:4px 10px;
+  border-radius:999px;
+  font-weight:700;
+  font-size:.85rem;
+  border:1px solid var(--admin-border);
+  background:rgba(255,255,255,.03);
+}
+
+.admin-wrap .version-status .pill.ok{
+  border-color:rgba(46,204,113,.55);
+  background:rgba(46,204,113,.14);
+  color:#bff5d3;
+}
+
+.admin-wrap .version-status .pill.bad{
+  border-color:rgba(231,76,60,.55);
+  background:rgba(231,76,60,.14);
+  color:#ffd0cc;
+}
+
+.admin-wrap .divider{
+  height:1px;
+  background:rgba(255,255,255,.06);
+  margin:14px 0;
+}
+
+@media (max-width:640px){
+  .admin-wrap table{ min-width:640px; }
+  .admin-wrap .admin-nav-inner{ padding:10px 12px; }
+  .admin-wrap .container{ padding:14px 12px; }
+}
+
+/* 
+------------------------------------------------------------------------- 
+*/
+/* Generic layout helpers used by Posts / Media / Health (migrated from 
+inline) */
+/* 
+------------------------------------------------------------------------- 
+*/
+
+.admin-grid{
+  display:grid;
+  gap:var(--admin-gap);
+  grid-template-columns:repeat(5, minmax(0, 1fr));
+}
+
+.admin-grid.cols-2{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+.admin-grid.cols-3{ grid-template-columns:repeat(3, minmax(0, 1fr)); }
+.admin-grid.cols-4{ grid-template-columns:repeat(4, minmax(0, 1fr)); }
+.admin-grid.cols-5{ grid-template-columns:repeat(5, minmax(0, 1fr)); }
+
+@media (max-width: 980px){
+  .admin-grid{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .admin-grid.cols-3{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .admin-grid.cols-4{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .admin-grid.cols-5{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 520px){
+  .admin-grid{ grid-template-columns:1fr !important; }
+}
+
+.admin-row{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+}
+
+.admin-kv{
+  display:grid;
+  grid-template-columns:auto 1fr;
+  gap:6px 10px;
+}
+
+.admin-kv .k{
+  color:var(--admin-muted);
+  font-size:12px;
+  letter-spacing:.02em;
+}
+
+.admin-kv .v{
+  color:var(--admin-text);
+  font-size:13px;
+}
+
+.admin-note{
+  color:var(--admin-muted);
+  font-size:12px;
+}
+
+.admin-mono{
+  font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 
+"Liberation Mono", "Courier New", monospace;
+}
+
+.admin-kpi{
+  font-size:1.85rem;
+  font-weight:900;
+  letter-spacing:-0.02em;
+}
+
+.admin-kpi-label{
+  color:var(--admin-muted);
+  font-size:12px;
+  margin-top:2px;
+}
+
+.admin-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:56px;
+  padding:4px 10px;
+  border-radius:999px;
+  font-weight:800;
+  font-size:12px;
+  border:1px solid var(--admin-border);
+  background:rgba(255,255,255,.03);
+  color:var(--admin-text);
+}
+
+.admin-badge.ok{
+  border-color:rgba(46,204,113,.55);
+  background:rgba(46,204,113,.14);
+  color:#bff5d3;
+}
+
+.admin-badge.fail{
+  border-color:rgba(231,76,60,.55);
+  background:rgba(231,76,60,.14);
+  color:#ffd0cc;
+}
+
+/* 
+------------------------------------------------------------------------- 
+*/
+/* Media admin (media.php uses .admin-media wrapper, not .admin-wrap)         
+*/
+/* 
+------------------------------------------------------------------------- 
+*/
+
+.admin-media{
+  color:var(--admin-text);
+}
+
+.admin-media .admin-media-grid{
+  display:grid;
+  gap:14px;
+  grid-template-columns:repeat(1, minmax(0, 1fr));
+}
+
+@media (min-width: 768px){
+  .admin-media .admin-media-grid{ grid-template-columns:repeat(3, 
+minmax(0, 1fr)); }
+}
+
+@media (min-width: 1100px){
+  .admin-media .admin-media-grid{ grid-template-columns:repeat(4, 
+minmax(0, 1fr)); }
+}
+
+.admin-media .admin-media-tile{
+  border:1px solid var(--admin-border);
+  border-radius:12px;
+  overflow:hidden;
+  background:var(--admin-card-bg);
+  box-shadow:var(--admin-shadow);
+}
+
+.admin-media .admin-media-preview{
+  border-bottom:1px solid var(--admin-border);
+  background:rgba(255,255,255,.02);
+}
+
+.admin-media .admin-media-preview img{
+  width:100%;
+  height:170px;
+  object-fit:cover;
+  display:block;
+}
+
+.admin-media .admin-media-file{
+  height:170px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:12px;
+  text-align:center;
+}
+
+.admin-media .admin-media-actions{
+  display:flex;
+  gap:8px;
+  padding:10px 12px;
+  border-bottom:1px solid var(--admin-border);
+  background:var(--admin-card-bg);
+}
+
+.admin-media .admin-media-form{
+  padding:12px;
+}
+
+.admin-media .admin-media-form input,
+.admin-media .admin-media-form select,
+.admin-media .admin-media-form textarea{
+  width:100%;
+  border:1px solid var(--admin-border);
+  border-radius:10px;
+  padding:8px 10px;
+  font-size:14px;
+  background:rgba(255,255,255,.03);
+  color:var(--admin-text);
+}
+
+.admin-media .admin-media-form textarea{ resize:vertical; }
+
+.admin-media .admin-media-form input::placeholder,
+.admin-media .admin-media-form textarea::placeholder{
+  color:rgba(167,167,179,.75);
+}
+
+.admin-media .admin-media-row{
+  display:grid;
+  grid-template-columns:1fr 1fr 100px;
+  gap:10px;
+  align-items:end;
+}
+
+@media (max-width: 820px){
+  .admin-media .admin-media-row{
+    grid-template-columns:1fr;
+  }
+}
+
+/* Bootstrap compatibility inside media admin */
+.admin-media .card,
+.admin-media .card-body{
+  background:var(--admin-card-bg);
+  border-color:var(--admin-border);
+  color:var(--admin-text);
+}
+
+.admin-media .text-muted{ color:var(--admin-muted) !important; }
+
+/* Dashboard layout (restore card grid) */
+.admin-dashboard{
+  display:grid;
+  gap:var(--admin-gap);
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 980px){
+  .admin-dashboard{
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px){
+  .admin-dashboard{
+    grid-template-columns:1fr;
+  }
+}
+
+/* 
+-------------------------------------------------------------------------- 
+*/
+/* Admin grid helpers (Bootstrap-like row/col)                                
+*/
+/* 
+-------------------------------------------------------------------------- 
+*/
+
+.admin-wrap .row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:var(--admin-gap);
+}
+
+.admin-wrap .col-12,
+.admin-wrap .col-md-6,
+.admin-wrap .col-lg-3{
+  width:100%;
+}
+
+@media (min-width:768px){
+  .admin-wrap .col-md-6{
+    width:calc(50% - (var(--admin-gap) / 2));
+  }
+}
+
+@media (min-width:992px){
+  .admin-wrap .col-lg-3{
+    width:calc(25% - (var(--admin-gap) * 3 / 4));
+  }
+}
+
+.admin-wrap .admin-nav{
+  background:linear-gradient(180deg, rgba(20,24,36,.98), 
+rgba(16,19,28,.96));
+  border-bottom:1px solid var(--admin-border);
+  position:sticky;
+  top:0;
+  z-index:100;
+  backdrop-filter:saturate(140%) blur(8px);
+}
+
+.admin-wrap .admin-nav-inner{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:12px 16px;
+  max-width:1200px;
+  margin:0 auto;
+}
+
+.admin-wrap .admin-nav-left,
+.admin-wrap .admin-nav-right{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.admin-wrap .admin-nav-brand,
+.admin-wrap .admin-nav-link{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  text-decoration:none;
+  padding:7px 10px;
+  border-radius:999px;
+  border:1px solid transparent;
+  color:var(--admin-muted);
+  font-weight:650;
+  font-size:.92rem;
+}
+
+.admin-wrap .admin-nav-link:hover,
+.admin-wrap .admin-nav-brand:hover{
+  color:var(--admin-text);
+  border-color:var(--admin-border);
+  background:rgba(255,255,255,.03);
+  text-decoration:none;
+}
+
+.admin-wrap .admin-nav-logout{
+  color:var(--admin-text);
+  border-color:var(--admin-border);
+  background:rgba(255,255,255,.04);
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Form select readability (dark admin)                                       */
+/* -------------------------------------------------------------------------- */
+
+.admin-wrap select,
+.admin-media select{
+  color: var(--admin-text);
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--admin-border);
+}
+
+/* The dropdown list itself (options) */
+.admin-wrap select option,
+.admin-media select option{
+  color: #111;
+  background: #fff;
+}
+
+/* If the browser supports it, keep the dropdown in dark mode too */
+@supports (color-scheme: dark){
+  .admin-wrap select,
+  .admin-media select{
+    color-scheme: dark;
+  }
+
+  .admin-wrap select option,
+  .admin-media select option{
+    color: var(--admin-text);
+    background: #0f1116;
+  }
+}

@@ -1,0 +1,125 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Admin: Health
+ * Route: /admin?action=health
+ */
+
+(function (): void {
+    global $db, $auth, $render_json, $render_md;
+
+    $esc = static function (string $v): string {
+        return htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
+    };
+
+    $ok = static function (string $label, string $detail = '') use ($esc): string {
+        $d = $detail !== '' ? '<div class="admin-help small">' . $esc($detail) . '</div>' : '';
+        return '<div class="health-row ok"><strong>OK</strong><span class="health-label">' . $esc($label) . '</span>' . $d . '</div>';
+    };
+
+    $bad = static function (string $label, string $detail = '') use ($esc): string {
+        $d = $detail !== '' ? '<div class="admin-help small">' . $esc($detail) . '</div>' : '';
+        return '<div class="health-row bad"><strong>FAIL</strong><span class="health-label">' . $esc($label) . '</span>' . $d . '</div>';
+    };
+
+    // Gate: must be logged in
+    if (!$auth instanceof auth || !$auth->check()) {
+        header('Location: /login');
+        exit;
+    }
+
+    // If you want health to be admin-only, uncomment:
+    /*
+    if (method_exists($auth, 'role')) {
+        $role = (string) $auth->role();
+        if ($role !== 'admin') {
+            http_response_code(403);
+            echo '<div class="admin-wrap"><div class="admin-card"><h2>Forbidden</h2><p>Admins only.</p></div></div>';
+            return;
+        }
+    }
+    */
+
+    $rows = [];
+
+    $rows[] = $ok('Admin runtime', 'If you see this, admin router + views are working.');
+
+    // DB
+    $conn = null;
+    if ($db instanceof db) {
+        $conn = $db->connect();
+        if ($conn instanceof mysqli) {
+            $rows[] = $ok('Database connection', 'Connected.');
+        } else {
+            $rows[] = $bad('Database connection', 'db->connect() failed.');
+        }
+    } else {
+        $rows[] = $bad('Database object', '$db is not an instance of db.');
+    }
+
+    // Renderers
+    $rows[] = is_callable($render_json) ? $ok('JSON renderer callable') : $bad('JSON renderer callable', '$render_json not callable.');
+    $rows[] = is_callable($render_md) ? $ok('Markdown renderer callable') : $bad('Markdown renderer callable', '$render_md not callable.');
+
+    $rows[] = class_exists('render_json') ? $ok('Class render_json loaded') : $bad('Class render_json loaded');
+    $rows[] = class_exists('render_md') ? $ok('Class render_md loaded') : $bad('Class render_md loaded');
+
+    // Registry tables
+    $check_table = static function (mysqli $c, string $table): bool {
+        $t = (string) preg_replace('~[^a-z0-9_]+~i', '', $table);
+        if ($t === '') {
+            return false;
+        }
+        $r = $c->query("SHOW TABLES LIKE '" . $c->real_escape_string($t) . "'");
+        if (!$r instanceof mysqli_result) {
+            return false;
+        }
+        $has = $r->num_rows > 0;
+        $r->free();
+        return $has;
+    };
+
+    if ($conn instanceof mysqli) {
+        $rows[] = $check_table($conn, 'modules') ? $ok('Table: modules') : $bad('Table: modules');
+        $rows[] = $check_table($conn, 'plugins') ? $ok('Table: plugins') : $bad('Table: plugins');
+        $rows[] = $check_table($conn, 'themes') ? $ok('Table: themes') : $bad('Table: themes');
+        $rows[] = $check_table($conn, 'settings') ? $ok('Table: settings') : $bad('Table: settings');
+        $rows[] = $check_table($conn, 'users') ? $ok('Table: users') : $bad('Table: users');
+        $rows[] = $check_table($conn, 'posts') ? $ok('Table: posts') : $bad('Table: posts');
+    }
+
+    // Writable paths
+    $docroot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '.', '/\\');
+
+    $paths = [
+        'webroot/logs' => $docroot . '/logs',
+        'app/data'     => $docroot . '/app/data',
+    ];
+
+    foreach ($paths as $label => $path) {
+        if (!is_dir($path)) {
+            $rows[] = $bad("Writable: {$label}", "Missing: {$path}");
+            continue;
+        }
+        if (!is_writable($path)) {
+            $rows[] = $bad("Writable: {$label}", "Not writable: {$path}");
+            continue;
+        }
+        $rows[] = $ok("Writable: {$label}", $path);
+    }
+
+    echo '<div class="admin-wrap">';
+    echo '  <div class="admin-head">';
+    echo '    <h1 class="admin-title">Health</h1>';
+    echo '    <div class="admin-sub">UTC: ' . $esc(gmdate('Y-m-d H:i:s')) . '</div>';
+    echo '  </div>';
+
+    echo '  <div class="health-wrap">';
+    echo        implode("\n", $rows);
+    echo '  </div>';
+    echo '</div>';
+
+})();
+

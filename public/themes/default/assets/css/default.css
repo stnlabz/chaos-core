@@ -1,0 +1,353 @@
+/* ============================================
+   Chaos CMS DB — Default Theme CSS (Minimal)
+   ============================================ */
+
+/* Reset */
+body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    background: #f8f9fa;
+    color: #222;
+}
+
+/* Container */
+.container {
+    width: 90%;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 20px 0;
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+    margin-top: 0;
+    font-weight: 600;
+}
+
+/* Basic link styling */
+a {
+    color: #0066cc;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+/* ==========================================
+  Nav and Branding
+  ========================================== */
+/* ------------------------------------------------------------
+   CHAOS CMS DB — BASIC NAVBAR + BRAND
+   Minimal, Bootstrap-ish without any framework dependencies.
+   ------------------------------------------------------------ */
+/* NAV WRAPPER */
+.navbar {
+    width: 100%;
+    display: flex;
+    align-items: center;          /* vertically align brand + nav */
+    justify-content: space-between;
+
+    padding: 0.75rem 1rem;
+    background: #D3D3D3;
+    color: #000000;
+    border-bottom: 1px solid #BEBEBE;
+    box-sizing: border-box;
+    margin-bottom: 1rem;
+}
+
+/* BRAND: ICON + TEXT */
+.navbar-brand {
+    display: inline-flex;         /* icon + text in a row */
+    align-items: center;          /* vertical alignment */
+    gap: 0.5rem;                  /* space between icon & text */
+
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #000000;
+    text-decoration: none;
+    margin-right: 1rem;
+}
+
+.navbar-brand:hover {
+    color: #cccccc;
+}
+
+/* BRAND ICON */
+.navbar-brand-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* If you use <img> for the logo */
+.navbar-brand-icon img {
+    display: block;
+    width: 30px;                  /* adjust as needed */
+    height: 30px;
+}
+
+/* If you inline <svg>, this keeps it in check */
+.navbar-brand-icon svg {
+    display: block;
+    width: 28px;
+    height: 28px;
+    fill: currentColor;           /* logo follows text color */
+}
+
+/* BRAND TEXT */
+.navbar-brand-text {
+    line-height: 1;
+}
+
+/* NAV LINKS STAY THE SAME */
+.navbar-nav {
+    display: flex;
+    gap: 1rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.navbar-nav li {
+    margin: 0;
+    padding: 0;
+}
+
+.navbar-nav a {
+    color: #000000;
+    text-decoration: none;
+    padding: 0.4rem 0.5rem;
+    border-radius: 4px;
+    transition: background 0.15s ease;
+}
+
+.navbar-nav a:hover {
+    background: #ffffff;
+}
+
+.navbar-nav a.active {
+    background: none !important;
+    color: #000000;
+    font-weight: 700;
+}
+
+/* MOBILE */
+@media (max-width: 768px) {
+    .navbar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .navbar-nav {
+        flex-direction: column;
+        gap: 0.5rem;
+        width: 100%;
+        margin-top: 0.75rem;
+    }
+
+    .navbar-nav a {
+        width: 100%;
+        display: block;
+    }
+}
+
+/* ============================================
+   Layout helpers
+   ============================================ */
+
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+/* ============================================
+   Card component
+   ============================================ */
+
+.card {
+    background: #ffffff;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    padding: 20px;
+    box-sizing: border-box;
+    flex: 1;
+    min-width: 250px;
+}
+
+.card h3 {
+    margin-top: 0;
+}
+
+/* Small text */
+small {
+    font-size: 0.80rem;
+    color: #555;
+}
+
+/* ============================================
+   Buttons
+   ============================================ */
+
+.btn {
+    display: inline-block;
+    padding: 8px 14px;
+    background: #0066cc;
+    color: white;
+    border-radius: 4px;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.btn:hover {
+    background: #004da3;
+}
+
+.btn-secondary {
+    background: #777;
+}
+
+.btn-secondary:hover {
+    background: #555;
+}
+
+.btn-danger {
+    background: #cc0000;
+}
+
+.btn-danger:hover {
+    background: #a80000;
+}
+
+/* Spinner for .btn-working */
+.btn-working {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.btn-working::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: -22px;
+    width: 14px;
+    height: 14px;
+    margin-top: -7px;
+    border: 2px solid rgba(0,0,0,0.2);
+    border-top-color: #000;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+/* Spinner animation */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   Admin cards grid
+   ============================================ */
+
+.admin-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.admin-grid .card {
+    flex: 1 0 260px;
+}
+
+/* Breadcrumb */
+.breadcrumb,
+.admin-breadcrumb {
+    margin-bottom: 15px;
+}
+
+.breadcrumb small a,
+.admin-breadcrumb small a {
+    color: #0066cc;
+}
+
+.breadcrumb small,
+.admin-breadcrumb small {
+    color: #555;
+}
+
+/* Tables inside admin pages */
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+table th,
+table td {
+    padding: 8px;
+    border: 1px solid #ccc;
+}
+
+table th {
+    background: #eee;
+}
+
+/* -----------------------------------------------------------
+   Code Block — Light Theme Neutral
+   ----------------------------------------------------------- */
+pre {
+    background: #f7f7f7;
+    border: 1px solid #dcdcdc;
+    border-radius: 8px;
+    padding: 1.5rem 1rem 1rem 1rem; /* extra top padding for the pill */
+    margin: 1.25rem 0;
+    overflow-x: auto;
+    position: relative;
+    font-family: Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+/* Code text */
+pre code {
+    font-size: 0.9rem;
+    color: #222;
+    white-space: pre;
+    display: block;
+}
+
+/* -----------------------------------------------------------
+   Language Pill — upper-left INSIDE the box
+   ----------------------------------------------------------- */
+pre code[class^="code-"]::before {
+    position: absolute;
+    top: 0.35rem;        /* move down from top border */
+    left: 0.75rem;       /* move right a little */
+
+    background: #e4e4e4;
+    color: #555;
+    border: 1px solid #ccc;
+
+    padding: 2px 8px;
+    border-radius: 6px;
+
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+
+    content: attr(data-lang); /* temporarily overridden below */
+}
+
+/* Language labels */
+pre code.code-php::before  { content: "PHP"; }
+pre code.code-json::before { content: "JSON"; }
+pre code.code-go::before   { content: "GO"; }
+pre code.code-bash::before { content: "BASH"; }
+pre code.code-sh::before   { content: "SH"; }
+pre code.code-html::before { content: "HTML"; }
+pre code.code-css::before  { content: "CSS"; }
+pre code.code-js::before   { content: "JS"; }
+pre code.code-yaml::before { content: "YAML"; }
+pre code.code-sql::before  { content: "SQL"; }
+

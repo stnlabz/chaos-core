@@ -1,0 +1,263 @@
+/* -----------------------------------------------------------
+   Chaos CMS — Admin Core Styles
+   This stylesheet is *theme-independent* and always loaded.
+----------------------------------------------------------- */
+
+/* Base layout */
+body.admin {
+    background: #111;
+    color: #ddd;
+    font-family: system-ui, sans-serif;
+}
+
+/* Header & top bar */
+.admin-topbar {
+    background: #1a1a1a;
+    padding: 1rem 2rem;
+    border-bottom: 1px solid #333;
+}
+
+.admin-topbar h1 {
+    margin: 0;
+    font-size: 1.4rem;
+    color: #fff;
+}
+
+/* Top-right button group */
+.admin-top-actions {
+    text-align: right;
+    margin-bottom: 1.5rem;
+}
+
+.admin-top-actions a {
+    margin-left: 0.5rem;
+}
+
+/* Containers */
+.admin-container {
+    padding: 2rem;
+}
+
+/* Cards */
+.admin-card {
+    background: #1b1b1b;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+    transition: 0.2s ease;
+}
+
+.admin-card:hover {
+    border-color: #666;
+}
+
+/* Gothic-witchy subtle glow (light touch, not theme-breaking) */
+.admin-card:hover {
+    box-shadow: 0 0 10px rgba(160, 0, 255, 0.3);
+}
+
+/* Bottom quick links */
+.admin-bottom-links {
+    margin-top: 1.5rem;
+}
+
+.admin-bottom-links a {
+    margin-right: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Buttons */
+.admin-btn {
+    background: #222;
+    border: 1px solid #444;
+    color: #ddd;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.admin-btn:hover {
+    background: #333;
+    border-color: #666;
+    color: #fff;
+}
+
+/* Table styling (for users, posts, etc.) */
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+}
+
+.admin-table th,
+.admin-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #333;
+}
+
+.admin-table th {
+    background: #222;
+}
+
+/* /app/assets/css/admin.css
+   KISS admin UI grid + cards (Bootstrap-ish, but minimal)
+*/
+
+:root {
+    --admin-bg: #ffffff;
+    --admin-text: #111827;
+    --admin-muted: #6b7280;
+    --admin-border: #d1d5db;
+    --admin-card-bg: #ffffff;
+    --admin-link: #1d4ed8;
+    --admin-link-hover: #1e40af;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    background: var(--admin-bg);
+    color: var(--admin-text);
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif;
+    line-height: 1.4;
+}
+
+/* Typography helpers used throughout admin */
+.small {
+    font-size: 0.875rem;
+}
+
+.text-muted {
+    color: var(--admin-muted);
+}
+
+.fw-semibold {
+    font-weight: 600;
+}
+
+.h3 {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+/* Container */
+.container {
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 16px;
+}
+
+.my-4 {
+    margin-top: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.mt-1 { margin-top: 0.25rem; }
+.mt-2 { margin-top: 0.5rem; }
+.mt-3 { margin-top: 1rem; }
+.mb-3 { margin-bottom: 1rem; }
+
+.m-0 { margin: 0; }
+
+/* Flex helpers */
+.d-flex { display: flex; }
+.align-items-center { align-items: center; }
+.justify-content-between { justify-content: space-between; }
+
+/* Links */
+a {
+    color: var(--admin-link);
+    text-decoration: none;
+}
+
+a:hover {
+    color: var(--admin-link-hover);
+    text-decoration: underline;
+}
+
+/* Grid: .row + .col-* */
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    margin-left: -10px;
+    margin-right: -10px;
+}
+
+.row > [class*="col-"] {
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+/* Base columns */
+.col-12 { width: 100%; }
+
+/* md breakpoint */
+@media (min-width: 768px) {
+    .col-md-6 { width: 50%; }
+}
+
+/* lg breakpoint */
+@media (min-width: 992px) {
+    .col-lg-3 { width: 25%; }
+}
+
+/* Card */
+.card {
+    display: block;
+    background: var(--admin-card-bg);
+    border: 1px solid var(--admin-border);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.card-body {
+    padding: 14px 14px;
+}
+
+/* Make dashboard tiles look like clickable cards */
+.admin-dashboard a.card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+}
+
+.admin-dashboard a.card:hover {
+    text-decoration: none;
+    border-color: #9ca3af;
+}
+
+/* Prevent the “smashed” look */
+.admin-dashboard .card-body > div {
+    word-break: break-word;
+}
+
+/* Code blocks in environment tile */
+code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.875rem;
+}
+
+/* Alerts (if you use them elsewhere) */
+.alert {
+    border: 1px solid var(--admin-border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    background: #f9fafb;
+}
+
+.alert-danger {
+    border-color: #fca5a5;
+    background: #fef2f2;
+    color: #991b1b;
+}
+
