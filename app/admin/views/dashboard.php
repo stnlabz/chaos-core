@@ -45,7 +45,7 @@ $media   = $countSql('SELECT COUNT(*) FROM media_files');
 $users   = $countSql('SELECT COUNT(*) FROM users');
 $modules = $countSql('SELECT COUNT(*) FROM modules WHERE installed=1 AND enabled=1');
 $plugins = $countSql('SELECT COUNT(*) FROM plugins WHERE installed=1 AND enabled=1');
-$themes = $countSql('SELECT COUNT(*) FROM themes WHERE installed=1 AND enabled=1');
+$themes  = $countSql('SELECT COUNT(*) FROM themes WHERE installed=1 AND enabled=1');
 
 // Version check
 $localVersion  = 'unknown';
@@ -95,6 +95,7 @@ echo '    <h1 class="h3 mt-2 mb-1">Dashboard</h1>';
 echo '    <div class="text-muted mb-3">Quick view.</div>';
 
 $tiles = [
+    ['Settings', 'Manage your sites Settings', '/admin?action=settings'],
     ['Pages', 'Manage public pages', '/admin?action=pages'],
     ['Posts', 'Write &amp; publish', '/admin?action=posts'],
     ['Media', 'Uploads &amp; gallery', '/admin?action=media'],
@@ -172,6 +173,13 @@ echo '        <div class="text-muted small mb-2">Local vs remote version check.<
 echo '        <div class="text-muted small">Status: <strong>' . htmlspecialchars($statusText, ENT_QUOTES, 'UTF-8') . '</strong></div>';
 echo '        <div class="text-muted small">Local: <span class="fw-semibold">' . htmlspecialchars($localVersion, ENT_QUOTES, 'UTF-8') . '</span></div>';
 echo '        <div class="text-muted small">Remote: <span class="fw-semibold">' . htmlspecialchars($remoteVersion, ENT_QUOTES, 'UTF-8') . '</span></div>';
+
+if ($statusText === 'Update Available') {
+    echo '        <div class="mt-3">';
+    echo '          <a class="btn btn-sm btn-primary" href="/admin?action=update">Run Update</a>';
+    echo '        </div>';
+}
+
 echo '      </div></div></div>';
 
 echo '    </div>';

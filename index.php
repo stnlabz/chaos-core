@@ -10,6 +10,10 @@
 */
 require_once ( __DIR__ . '/app/bootstrap.php');
 
+if(is_file(__DIR__ . '/install/index.php')) {
+    header("Location: /install"); 
+}
+
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $trimmed  = trim($path, '/');
 [$first]  = $trimmed === '' ? ['home'] : explode('/', $trimmed, 2);
