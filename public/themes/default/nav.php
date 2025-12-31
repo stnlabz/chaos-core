@@ -1,13 +1,26 @@
 <?php
-$current = '/' . trim(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/');
-if ($current === '/') {
-    $current = '/'; 
+declare(strict_types=1);
+
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
 }
+
+$isLoggedIn = !empty($_SESSION['auth']) && is_array($_SESSION['auth']) && !empty($_SESSION['auth']['id']);
+$role       = $isLoggedIn ? (string)($_SESSION['auth']['role'] ?? '') : '';
+$isAdmin    = ($role === 'admin');
+
+$current = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+
+function nav_active(string $href, string $current): string
+{
+    return ($href === '/' && $current === '/') || ($href !== '/' && str_starts_with($current, $href))
+        ? ' active'
+        : '';
+}
+
 global $auth;
 
-$logged_in = $auth instanceof auth && $auth->check();
-$user      = $logged_in ? $auth->user() : null;
-$is_admin  = is_array($user) && ($user['role'] ?? '') === 'admin';
+$nav = utility::nav_state($auth);
 ?>
 
 <!-- Handle the html demand for an H1 -->
@@ -18,26 +31,35 @@ $is_admin  = is_array($user) && ($user['role'] ?? '') === 'admin';
             <!-- Inline SVG or <img> -->
             <img src="/public/themes/default/assets/icons/icon.svg" alt="Chaos >
         </span>
-        <span class="navbar-brand-text">Chaos CMS</span>
+        <span class="navbar-brand-text"><?= $site_name ?></span>
     </a>
     
 <ul class="navbar-nav">
     <li><a href="/" class="<?php echo ($current === '/') ? 'active' : ''; ?>">Home</a></li>
     <li><a href="/posts" class="<?php echo ($current === '/posts') ? 'active' : ''; ?>">Posts</a></li>
-    <li><a href="/changelog" class="<?php echo ($current === '/changelog') ? 'active' : ''; ?>">Changelog</a></li>
-    <li><a href="/docs" class="<?php echo ($current === '/docs') ? 'active' : ''; ?>">Docs</a></li>
     <li><a href="/media" class="<?php echo ($current === '/media') ? 'active' : ''; ?>">Media</a></li>
 
-    <?php if ($is_admin): ?>
-        <li><a href="/admin" class="<?php echo ($current === '/admin') ? 'active' : ''; ?>">Admin</a></li>
-    <?php endif; ?>
-
-    <?php if ($logged_in): ?>
-        <li><a href="/profile" class="<?php echo ($current === '/profile') ? 'active' : ''; ?>">Profile</a></li>
-        <li><a href="/logout">Logout</a></li>
-    <?php else: ?>
-        <li><a href="/login" class="<?php echo ($current === '/login') ? 'active' : ''; ?>">Login</a></li>
-        <li><a href="/signup" class="<?php echo ($current === '/signup') ? 'active' : ''; ?>">Sign Up</a></li>
+     <?php if ($nav['logged_in']): ?>
+        <li>
+            <a href="/profile" class="<?= utility::nav_active('/profile'); ?>">
+                Account<?= $nav['username'] ? ' (' . e($nav['username']) . ')' : ''; ?>
+            </a>
+        </li>
+        <?php if ($nav['can_admin']): ?>
+            <li>
+                <a href="/admin" class="<?= utility::nav_active('/admin'); ?>">Admin</a>
+            </li>
+            <li>
+                <a href="/logout" class="<?= utility::nav_active('/logout'); ?>">Logout</a>
+            </li>
+        <?php endif; ?>
+        <?php else: ?>
+        <li>
+            <a href="/login" class="<?= utility::nav_active('/login'); ?>">Login</a>
+        </li>
+        <li>
+            <a href="/signup" class="<?= utility::nav_active('/signup'); ?>">Sign Up</a>
+        </li>
     <?php endif; ?>
 </ul>
   </div>
