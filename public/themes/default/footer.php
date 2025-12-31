@@ -4,7 +4,7 @@
 <div class="container">
   <div class="row">
     <footer>
-      <small>&copy <?= date('Y') ?>, Stn-Labz & Chaos CMS</small>
+      <small>&copy <?= date('Y') ?>, <?= $site_name ?></small>
     </footer>
   </div>
 </div>
