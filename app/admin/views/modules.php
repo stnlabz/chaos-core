@@ -3,8 +3,17 @@
 declare(strict_types=1);
 
 /**
- * Chaos CMS DB — Admin: Modules
- * Path: /app/admin/views/modules.php
+ * Chaos CMS — Admin: Modules
+ *
+ * Rules:
+ * - Modules live in: /public/modules/{slug}
+ * - Optional install hook:
+ *     /app/modules/{slug}/install.php OR /public/modules/{slug}/install.php
+ *     function {slug}_install(mysqli $conn): array{ok:bool,error?:string}
+ * - Optional uninstall hook:
+ *     /app/modules/{slug}/uninstall.php OR /public/modules/{slug}/uninstall.php
+ *     function {slug}_uninstall(mysqli $conn): array{ok:bool,error?:string}
+ * - If hook missing, move along.
  */
 
 (function (): void {
@@ -21,16 +30,25 @@ declare(strict_types=1);
         return;
     }
 
-    $docroot  = rtrim($_SERVER['DOCUMENT_ROOT'] ?? dirname(__DIR__, 3), '/\\');
-    $baseDir  = $docroot . '/public/modules';
-    $nowUtc   = gmdate('Y-m-d H:i:s');
+    $docroot = rtrim((string) ($_SERVER['DOCUMENT_ROOT'] ?? dirname(__DIR__, 3)), '/\\');
+    $baseDir = $docroot . '/public/modules';
+    $nowUtc  = gmdate('Y-m-d H:i:s');
 
-    $slug_clean = static function (string $slug): string {
+    $flashOk  = '';
+    $flashErr = '';
+
+    $e = static fn(string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
+
+    $slugClean = static function (string $slug): string {
         $slug = (string) preg_replace('~[^a-z0-9_\-]~i', '', $slug);
         return strtolower($slug);
     };
 
-    $meta_read = static function (string $dir, string $slug): array {
+    $hasAdmin = static function (string $slug) use ($docroot): int {
+        return is_file($docroot . '/public/modules/' . $slug . '/admin/main.php') ? 1 : 0;
+    };
+
+    $metaRead = static function (string $dir, string $slug): array {
         $fallback = [
             'slug'    => $slug,
             'name'    => $slug,
@@ -58,8 +76,18 @@ declare(strict_types=1);
         ];
     };
 
-    $has_admin = static function (string $slug) use ($docroot): int {
-        return is_file($docroot . '/public/modules/' . $slug . '/admin/main.php') ? 1 : 0;
+    $resolveHookPath = static function (string $docroot, string $slug, string $file): string {
+        $p = $docroot . '/app/modules/' . $slug . '/' . $file;
+        if (is_file($p)) {
+            return $p;
+        }
+
+        $p = $docroot . '/public/modules/' . $slug . '/' . $file;
+        if (is_file($p)) {
+            return $p;
+        }
+
+        return '';
     };
 
     $redirect = static function (): void {
@@ -69,71 +97,46 @@ declare(strict_types=1);
 
     $csrf = function_exists('csrf_token') ? (string) csrf_token() : '';
 
-    // ------------------------------------------------------------
+    // ---------------------------------------------------------------------
     // POST actions
-    // ------------------------------------------------------------
+    // ---------------------------------------------------------------------
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $token = (string) ($_POST['csrf'] ?? '');
-        if (!function_exists('csrf_ok') || !csrf_ok($token)) {
-            $redirect();
-        }
 
-        $do   = (string) ($_POST['do'] ?? '');
-        $slug = $slug_clean((string) ($_POST['slug'] ?? ''));
+        if (function_exists('csrf_ok') && !csrf_ok($token)) {
+            $flashErr = 'Invalid CSRF token.';
+        } else {
+            $do   = (string) ($_POST['do'] ?? '');
+            $slug = $slugClean((string) ($_POST['slug'] ?? ''));
 
-        if ($do === '' || $slug === '' || $slug === 'home') {
-            $redirect();
-        }
-
-        $dir = $baseDir . '/' . $slug;
-        if (!is_dir($dir)) {
-            $redirect();
-        }
-
-        $meta = $meta_read($dir, $slug);
-
-        $name = (string) $meta['name'];
-        $ver  = (string) $meta['version'];
-        $cre  = (string) $meta['creator'];
-        $adm  = (int) $has_admin($slug);
-
-        $row = null;
-        $stmt = $conn->prepare("SELECT slug, installed, enabled FROM modules WHERE slug=? LIMIT 1");
-        if ($stmt) {
-            $stmt->bind_param('s', $slug);
-            $stmt->execute();
-            $res = $stmt->get_result();
-            $row = $res ? $res->fetch_assoc() : null;
-            $stmt->close();
-        }
-
-        if ($do === 'install') {
-            $stmt = $conn->prepare(
-                "INSERT INTO modules (slug, name, version, creator, has_admin, enabled, installed, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, 0, 1, ?, ?)
-                 ON DUPLICATE KEY UPDATE
-                    name=VALUES(name),
-                    version=VALUES(version),
-                    creator=VALUES(creator),
-                    has_admin=VALUES(has_admin),
-                    installed=1,
-                    updated_at=VALUES(updated_at)"
-            );
-
-            if ($stmt) {
-                $stmt->bind_param('ssssiss', $slug, $name, $ver, $cre, $adm, $nowUtc, $nowUtc);
-                $stmt->execute();
-                $stmt->close();
+            if ($do === '' || $slug === '' || $slug === 'home') {
+                $redirect();
             }
 
-            $redirect();
-        }
+            $dir = $baseDir . '/' . $slug;
+            if (!is_dir($dir)) {
+                $redirect();
+            }
 
-        if ($do === 'enable') {
-            if (!is_array($row)) {
+            $meta = $metaRead($dir, $slug);
+
+            $name = (string) $meta['name'];
+            $ver  = (string) $meta['version'];
+            $cre  = (string) $meta['creator'];
+            $adm  = (int) $hasAdmin($slug);
+
+            if ($do === 'install') {
                 $stmt = $conn->prepare(
                     "INSERT INTO modules (slug, name, version, creator, has_admin, enabled, installed, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)"
+                     VALUES (?, ?, ?, ?, ?, 0, 1, ?, ?)
+                     ON DUPLICATE KEY UPDATE
+                        name=VALUES(name),
+                        version=VALUES(version),
+                        creator=VALUES(creator),
+                        has_admin=VALUES(has_admin),
+                        installed=1,
+                        enabled=0,
+                        updated_at=VALUES(updated_at)"
                 );
 
                 if ($stmt) {
@@ -141,7 +144,31 @@ declare(strict_types=1);
                     $stmt->execute();
                     $stmt->close();
                 }
-            } else {
+
+                $installPath = $resolveHookPath($docroot, $slug, 'install.php');
+
+                if ($installPath !== '') {
+                    require_once $installPath;
+
+                    $fn = $slug . '_install';
+
+                    if (function_exists($fn)) {
+                        $result = $fn($conn);
+
+                        if (is_array($result) && (($result['ok'] ?? true) === false)) {
+                            $flashErr = (string) ($result['error'] ?? 'Module installer failed.');
+                        }
+                    } else {
+                        $flashErr = 'Installer present but function missing: ' . $fn . '()';
+                    }
+                }
+
+                if ($flashErr === '') {
+                    $redirect();
+                }
+            }
+
+            if ($do === 'enable') {
                 $stmt = $conn->prepare(
                     "UPDATE modules
                      SET enabled=1, installed=1, name=?, version=?, creator=?, has_admin=?, updated_at=?
@@ -153,44 +180,68 @@ declare(strict_types=1);
                     $stmt->execute();
                     $stmt->close();
                 }
+
+                $redirect();
             }
 
-            $redirect();
-        }
+            if ($do === 'disable') {
+                $stmt = $conn->prepare("UPDATE modules SET enabled=0, updated_at=? WHERE slug=? LIMIT 1");
 
-        if ($do === 'disable') {
-            $stmt = $conn->prepare("UPDATE modules SET enabled=0, updated_at=? WHERE slug=? LIMIT 1");
-            if ($stmt) {
-                $stmt->bind_param('ss', $nowUtc, $slug);
-                $stmt->execute();
-                $stmt->close();
+                if ($stmt) {
+                    $stmt->bind_param('ss', $nowUtc, $slug);
+                    $stmt->execute();
+                    $stmt->close();
+                }
+
+                $redirect();
             }
 
-            $redirect();
-        }
+            if ($do === 'uninstall') {
+                $uninstallPath = $resolveHookPath($docroot, $slug, 'uninstall.php');
 
-        if ($do === 'uninstall') {
-            $stmt = $conn->prepare("DELETE FROM modules WHERE slug=? LIMIT 1");
-            if ($stmt) {
-                $stmt->bind_param('s', $slug);
-                $stmt->execute();
-                $stmt->close();
+                if ($uninstallPath !== '') {
+                    require_once $uninstallPath;
+
+                    $fn = $slug . '_uninstall';
+
+                    if (function_exists($fn)) {
+                        $result = $fn($conn);
+
+                        if (is_array($result) && (($result['ok'] ?? true) === false)) {
+                            $flashErr = (string) ($result['error'] ?? 'Module uninstall failed.');
+                        }
+                    } else {
+                        $flashErr = 'Uninstall hook present but function missing: ' . $fn . '()';
+                    }
+                }
+
+                if ($flashErr === '') {
+                    $stmt = $conn->prepare(
+                        "UPDATE modules
+                         SET enabled=0, installed=0, updated_at=?
+                         WHERE slug=? LIMIT 1"
+                    );
+
+                    if ($stmt) {
+                        $stmt->bind_param('ss', $nowUtc, $slug);
+                        $stmt->execute();
+                        $stmt->close();
+                    }
+
+                    $redirect();
+                }
             }
-
-            $redirect();
         }
-
-        $redirect();
     }
 
-    // ------------------------------------------------------------
-    // Load DB state
-    // ------------------------------------------------------------
-    $db_rows = $db->fetch_all("SELECT slug, installed, enabled, version, creator, name, has_admin FROM modules");
+    // ---------------------------------------------------------------------
+    // DB state
+    // ---------------------------------------------------------------------
     $state = [];
 
-    if (is_array($db_rows)) {
-        foreach ($db_rows as $r) {
+    $dbRows = $db->fetch_all('SELECT slug, installed, enabled, version, creator, has_admin FROM modules');
+    if (is_array($dbRows)) {
+        foreach ($dbRows as $r) {
             $s = (string) ($r['slug'] ?? '');
             if ($s !== '') {
                 $state[$s] = $r;
@@ -198,32 +249,29 @@ declare(strict_types=1);
         }
     }
 
-    // ------------------------------------------------------------
-    // Scan filesystem
-    // ------------------------------------------------------------
+    // ---------------------------------------------------------------------
+    // Filesystem scan
+    // ---------------------------------------------------------------------
     $items = [];
 
     if (is_dir($baseDir)) {
         foreach (glob($baseDir . '/*', GLOB_ONLYDIR) ?: [] as $dir) {
-            $slug = $slug_clean(basename($dir));
+            $slug = $slugClean(basename($dir));
             if ($slug === '' || $slug === 'home') {
                 continue;
             }
 
-            $meta = $meta_read($dir, $slug);
+            $meta = $metaRead($dir, $slug);
             $row  = $state[$slug] ?? null;
-
-            $installed = (int) ($row['installed'] ?? 0);
-            $enabled   = (int) ($row['enabled'] ?? 0);
 
             $items[] = [
                 'slug'      => $slug,
                 'name'      => (string) $meta['name'],
                 'version'   => (string) ($row['version'] ?? $meta['version']),
                 'creator'   => (string) ($row['creator'] ?? $meta['creator']),
-                'installed' => $installed,
-                'enabled'   => $enabled,
-                'has_admin' => (bool) $has_admin($slug),
+                'installed' => (int) ($row['installed'] ?? 0),
+                'enabled'   => (int) ($row['enabled'] ?? 0),
+                'has_admin' => (bool) $hasAdmin($slug),
             ];
         }
     }
@@ -231,14 +279,13 @@ declare(strict_types=1);
     usort($items, static function (array $a, array $b): int {
         $an = (string) ($a['name'] ?? '');
         $bn = (string) ($b['name'] ?? '');
-        $c = strcasecmp($an, $bn);
+        $c  = strcasecmp($an, $bn);
         if ($c !== 0) {
             return $c;
         }
+
         return strcmp((string) ($a['slug'] ?? ''), (string) ($b['slug'] ?? ''));
     });
-
-    $e = static fn(string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
 
     ?>
     <div class="container my-3 admin-modules">
@@ -248,6 +295,14 @@ declare(strict_types=1);
                 <h1 class="h3 m-0">Modules</h1>
             </div>
         </div>
+
+        <?php if ($flashOk !== ''): ?>
+            <div class="alert alert-success"><?= $e($flashOk); ?></div>
+        <?php endif; ?>
+
+        <?php if ($flashErr !== ''): ?>
+            <div class="alert alert-danger"><?= $e($flashErr); ?></div>
+        <?php endif; ?>
 
         <?php if (empty($items)): ?>
             <div class="alert alert-secondary">No modules found in <code>/public/modules</code>.</div>
