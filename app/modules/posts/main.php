@@ -408,6 +408,19 @@ declare(strict_types=1);
                 <div class="post-body">
                     <?= (string)($post['body'] ?? ''); ?>
                 </div>
+                <div class="share">
+                <?php
+        	if (function_exists('share_buttons')) {
+    			$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    			$host   = (string) ($_SERVER['HTTP_HOST'] ?? '');
+    			$uri    = (string) ($_SERVER['REQUEST_URI'] ?? '/');
+
+    			$absUrl = $scheme . '://' . $host . $uri;
+
+    			echo share_buttons($absUrl, (string) $post['title']);
+		}
+                ?>
+                </div>
             </article>
 
             <section class="post-replies">
