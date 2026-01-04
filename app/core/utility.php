@@ -10,16 +10,15 @@ declare(strict_types=1);
  */
 class utility
 {
-
-  public static function redirect_to(string $url): void
+    public static function redirect_to(string $url): void
     {
-            header('Location: ' . $url, true);
-	    exit;
+        header('Location: ' . $url, true);
+        exit;
     }
-  
-  /*---------------------------------------------------------
-   * NAV HELPERS
-   * ------------------------------------------------------- */
+
+    /*---------------------------------------------------------
+     * NAV HELPERS
+     * ------------------------------------------------------- */
 
     public static function current_path(): string
     {
@@ -39,6 +38,8 @@ class utility
 
     /**
      * Navigation state helper
+     *
+     * @return array{logged_in:bool,username:string,role_id:int,can_admin:bool}
      */
     public static function nav_state(auth $auth): array
     {
@@ -51,16 +52,16 @@ class utility
             ];
         }
 
-        $user = $auth->user();
-
-        $roleId = (int)($user['role_id'] ?? 1);
+        $user   = $auth->user();
+        $roleId = (int) ($user['role_id'] ?? 1);
 
         return [
             'logged_in' => true,
-            'username'  => ucfirst((string)($user['username'] ?? '')),
+            'username'  => ucfirst((string) ($user['username'] ?? '')),
             'role_id'   => $roleId,
             // editor(2), moderator(3), admin(4)
             'can_admin' => in_array($roleId, [2, 3, 4], true),
         ];
     }
-}
+    
+  }

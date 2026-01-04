@@ -16,3 +16,6 @@ Once at login, login to the site using the username/password you set during the 
 Then after you have been logged in, it it recommended that you go to /admin then settings and setup the rest of your site.
 
 If you happen to stumble upon any issues, please go to https://github.com/stnlabz/chaos-core and submit an issue.
+
+It is recommended although not always an option, to do a fresh install
+Previous installs are recommended to get the latest install script

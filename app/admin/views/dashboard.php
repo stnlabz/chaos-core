@@ -18,6 +18,7 @@ if (!isset($db) || !$db instanceof db) {
     return;
 }
 
+
 $docroot = rtrim((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\');
 
 /**
@@ -185,4 +186,3 @@ echo '      </div></div></div>';
 echo '    </div>';
 echo '  </div>';
 echo '</div>';
-
