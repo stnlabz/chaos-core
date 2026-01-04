@@ -1,10 +1,10 @@
 Welcome to the Chaos CMS Core
 
-Core is a Hybrid version of the Chaos CMS meaning things like database configuration and such are maintained in JSON format, modules can utilize their own internal data as well like with the Lite Version, but utilization of a database is available.
+Core is a Hybrid version of the Chaos CMS meaning things like database configuration and such are maintained in JSON format, modules can utilize their own internal data as well like with the Lite Version, but utilization of a database is available and HIGHLY receommended.
 
-Without a database connection, this platform doe work but without users, modules, posts, etc, so it is HIGHLY recommended that you setup a database to use
+Without a database connection, this platform does work but without users, modules, posts, etc, so it is HIGHLY recommended that you setup a database to use.
 
-1. setup a database with a username and password on whatever Hosting provider that you use
+1. Setup a database with a username and password on whatever Hosting provider that you use
 2. The index will automatically redirect to /install if it finds it in in its root path
 3. Fill in the required data on the form
 
