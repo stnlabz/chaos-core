@@ -1,4 +1,5 @@
 Welcome to the Chaos CMS Core
+
 Core is a Hybrid version of the Chaos CMS meaning things like database configuration and such are maintained in JSON format, modules can utilize their own internal data as well like with the Lite Version, but utilization of a database is available.
 
 Without a database connection, this platform doe work but without users, modules, posts, etc, so it is HIGHLY recommended that you setup a database to use
