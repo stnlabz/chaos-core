@@ -14,6 +14,7 @@ declare(strict_types=1);
  */
  ?>
 <div class="container">
-  <h1>Chaos CMS Home</h1>
+  <h1>Chaos CMS</h1>
+  <p class="lead">Welcome to the Chaos CMS Core</p> 
   <p>You should create or edit <code>/public/modules/home(.php, .json or .md), in order for your own content to be displayed.</p>
 </div>

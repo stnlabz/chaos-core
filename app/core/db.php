@@ -2,17 +2,37 @@
 
 declare(strict_types=1);
 
+/**
+ * Chaos CMS — DB Core
+ *
+ * Loads DB credentials from /app/config/config.json and provides a small MySQLi wrapper.
+ *
+ * Supported config.json shapes:
+ *  1) Preferred:
+ *     { "db": { "host": "...", "user": "...", "pass": "...", "name": "..." } }
+ *  2) Legacy:
+ *     { "host": "...", "user": "...", "pass": "...", "name": "..." }
+ */
 final class db
 {
     /**
+     * Active MySQLi connection.
+     *
      * @var mysqli|null
      */
     protected ?mysqli $link = null;
 
     /**
+     * Normalized configuration.
+     *
      * @var array<string,string>
      */
-    protected array $config = [];
+    protected array $config = [
+        'host' => '',
+        'user' => '',
+        'pass' => '',
+        'name' => '',
+    ];
 
     /**
      * Load DB config from /app/config/config.json.
@@ -21,23 +41,50 @@ final class db
     {
         $cfgPath = dirname(__DIR__) . '/config/config.json';
 
-        if (is_file($cfgPath)) {
-            $raw = (string) file_get_contents($cfgPath);
-            $j   = json_decode($raw, true);
-
-            if (is_array($j)) {
-                $this->config = [
-                    'host' => (string)($j['host'] ?? ''),
-                    'user' => (string)($j['user'] ?? ''),
-                    'pass' => (string)($j['pass'] ?? ''),
-                    'name' => (string)($j['name'] ?? ''),
-                ];
-            }
+        if (!is_file($cfgPath)) {
+            return;
         }
+
+        $raw = (string) @file_get_contents($cfgPath);
+        if ($raw === '') {
+            return;
+        }
+
+        // Strip UTF-8 BOM if present (breaks json_decode).
+        if (strncmp($raw, "\xEF\xBB\xBF", 3) === 0) {
+            $raw = substr($raw, 3);
+        }
+
+        $j = json_decode($raw, true);
+        if (!is_array($j)) {
+            return;
+        }
+
+        // Preferred: {"db":{...}}
+        if (isset($j['db']) && is_array($j['db'])) {
+            $d = $j['db'];
+
+            $this->config = [
+                'host' => (string) ($d['host'] ?? ''),
+                'user' => (string) ($d['user'] ?? ''),
+                'pass' => (string) ($d['pass'] ?? ''),
+                'name' => (string) ($d['name'] ?? ''),
+            ];
+
+            return;
+        }
+
+        // Legacy: {"host":"...","user":"...","pass":"...","name":"..."}
+        $this->config = [
+            'host' => (string) ($j['host'] ?? ''),
+            'user' => (string) ($j['user'] ?? ''),
+            'pass' => (string) ($j['pass'] ?? ''),
+            'name' => (string) ($j['name'] ?? ''),
+        ];
     }
 
     /**
-     * Private connect tunnel.
+     * Internal connect tunnel.
      *
      * @return mysqli|false
      */
@@ -47,10 +94,10 @@ final class db
             return $this->link;
         }
 
-        $host = (string)($this->config['host'] ?? '');
-        $user = (string)($this->config['user'] ?? '');
-        $pass = (string)($this->config['pass'] ?? '');
-        $name = (string)($this->config['name'] ?? '');
+        $host = (string) ($this->config['host'] ?? '');
+        $user = (string) ($this->config['user'] ?? '');
+        $pass = (string) ($this->config['pass'] ?? '');
+        $name = (string) ($this->config['name'] ?? '');
 
         if ($host === '' || $user === '' || $name === '') {
             return false;
@@ -80,9 +127,17 @@ final class db
     }
 
     /**
-     * Close connection.
+     * Back-compat alias (some code expects this).
      *
-     * @return void
+     * @return mysqli|false
+     */
+    public function get_connection()
+    {
+        return $this->connect();
+    }
+
+    /**
+     * Close connection.
      */
     public function close(): void
     {
@@ -95,9 +150,6 @@ final class db
 
     /**
      * Escape a string for safe SQL usage (last resort; prefer prepared statements).
-     *
-     * @param string $value
-     * @return string
      */
     public function escape(string $value): string
     {
@@ -112,7 +164,6 @@ final class db
     /**
      * Run a raw query.
      *
-     * @param string $sql
      * @return mysqli_result|bool
      */
     public function query(string $sql)
@@ -126,9 +177,18 @@ final class db
     }
 
     /**
+     * Execute a non-select statement (INSERT/UPDATE/DELETE/DDL).
+     */
+    public function exec(string $sql): bool
+    {
+        $res = $this->query($sql);
+
+        return $res === true;
+    }
+
+    /**
      * Fetch one row.
      *
-     * @param string $sql
      * @return array<string,mixed>|null
      */
     public function fetch(string $sql): ?array
@@ -147,7 +207,6 @@ final class db
     /**
      * Fetch all rows.
      *
-     * @param string $sql
      * @return array<int,array<string,mixed>>
      */
     public function fetch_all(string $sql): array
@@ -158,11 +217,13 @@ final class db
         }
 
         $rows = [];
+
         while (true) {
             $row = $res->fetch_assoc();
             if (!is_array($row)) {
                 break;
             }
+
             $rows[] = $row;
         }
 
