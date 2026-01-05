@@ -7,6 +7,9 @@
 declare(strict_types=1);
 
 // Definitions
+if (!defined('APP_ROOT')) {
+    define('APP_ROOT', dirname(__DIR__) . '/app');
+}
 $ROOT = dirname(__DIR__);
 define('LOG_PATH', $ROOT . '/logs');
 

@@ -38,6 +38,8 @@ $nav = utility::nav_state($auth);
     <li><a href="/" class="<?php echo ($current === '/') ? 'active' : ''; ?>">Home</a></li>
     <li><a href="/posts" class="<?php echo ($current === '/posts') ? 'active' : ''; ?>">Posts</a></li>
     <li><a href="/media" class="<?php echo ($current === '/media') ? 'active' : ''; ?>">Media</a></li>
+    <li><a href="/pages/changelog" class="<?php echo ($current === '/pages/changelog') ? 'active' : ''; ?>">Changelog</a></li>
+    <li><a href="/codex" class="<?php echo ($current === '/codex') ? 'active' : ''; ?>">Codex</a></li>
 
      <?php if ($nav['logged_in']): ?>
         <li>
