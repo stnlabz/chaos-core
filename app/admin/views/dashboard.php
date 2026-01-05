@@ -18,7 +18,6 @@ if (!isset($db) || !$db instanceof db) {
     return;
 }
 
-
 $docroot = rtrim((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\');
 
 /**
@@ -89,7 +88,7 @@ if ($localVersion !== 'unknown' && $remoteVersion !== 'unknown') {
 // Render
 // -----------------------------------------------------------------------------
 
-echo '<div class="admin-wrap">';
+echo '<div class="admin-wrap admin-dash">';
 echo '  <div class="container my-4">';
 echo '    <div class="text-muted small">Admin &raquo; Dashboard</div>';
 echo '    <h1 class="h3 mt-2 mb-1">Dashboard</h1>';
@@ -186,3 +185,4 @@ echo '      </div></div></div>';
 echo '    </div>';
 echo '  </div>';
 echo '</div>';
+
