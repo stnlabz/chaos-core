@@ -63,3 +63,4 @@ class utility
             'can_admin' => in_array($roleId, [2, 3, 4], true),
         ];
     }
+}
