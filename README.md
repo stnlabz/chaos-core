@@ -5,7 +5,7 @@ v2.0.7
 
 ## Status
 **Stable**  
-Project is frozen pending bug discovery and fixes only.
+Project is stable.
 
 ---
 
@@ -13,7 +13,7 @@ Project is frozen pending bug discovery and fixes only.
 This release finalizes the Chaos CMS core, installer, updater, and admin tooling.  
 Architecture, update flow, and runtime behavior are now documented, versioned, and aligned.
 
-This marks the first **release-grade** core of Chaos CMS.
+This marks the first **release-grade** core of Chaos CMS Core.
 
 ---
 
