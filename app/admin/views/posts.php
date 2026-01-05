@@ -15,6 +15,7 @@ declare(strict_types=1);
  * - Topic (single)
  * - Visibility (0=Public, 1=Members, 2=Unlisted)
  */
+ echo '<div class="container">';
 
 (function (): void {
     global $db, $auth;
@@ -534,4 +535,4 @@ declare(strict_types=1);
     -->
     <?php
 })();
-
+echo '</div>';
