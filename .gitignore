@@ -1,2 +1,4 @@
-
-app/config/config.json
+/app/data/config.json
+*.zip
+*.tar.gz
+*.bz2
