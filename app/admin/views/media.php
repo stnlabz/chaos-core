@@ -13,7 +13,7 @@ declare(strict_types=1);
  *
  * media_gallery:
  *   visibility: 0=public, 2=members
- *   status: 0=draft, 1=published
+ *   status: 0=draft, 1=published, 2=unlisted
  */
 
 (function (): void {
@@ -84,7 +84,15 @@ declare(strict_types=1);
     };
 
     $status_text = static function (int $s): string {
-        return ($s === 1) ? 'Published' : 'Draft';
+        if ($s === 1) {
+            return 'Published';
+        }
+
+        if ($s === 2) {
+            return 'Unlisted';
+        }
+
+        return 'Draft';
     };
 
     // -----------------------------------------------------------------
@@ -169,7 +177,9 @@ declare(strict_types=1);
                 if ($vis !== 2) $vis = 0;
 
                 $status = (int) ($_POST['status'] ?? 0);
-                $status = ($status === 1) ? 1 : 0;
+                if ($status !== 1 && $status !== 2) {
+                    $status = 0;
+                }
 
                 $sql = "UPDATE media_gallery
                         SET title=?, caption=?, visibility=?, status=?, sort_order=?
@@ -231,7 +241,7 @@ declare(strict_types=1);
     // -----------------------------------------------------------------
     $q = trim((string) ($_GET['q'] ?? ''));
     $fltVis = (string) ($_GET['vis'] ?? '');     // '', '0', '2'
-    $fltStat = (string) ($_GET['st'] ?? '');     // '', '0', '1'
+    $fltStat = (string) ($_GET['st'] ?? '');     // '', '0', '1', '2'
 
     $where = [];
     $bindTypes = '';
@@ -252,7 +262,7 @@ declare(strict_types=1);
         $bindVals[] = (int) $fltVis;
     }
 
-    if ($fltStat === '0' || $fltStat === '1') {
+    if ($fltStat === '0' || $fltStat === '1' || $fltStat === '2') {
         $where[] = "COALESCE(g.status, 0) = ?";
         $bindTypes .= 'i';
         $bindVals[] = (int) $fltStat;
@@ -384,6 +394,7 @@ declare(strict_types=1);
                                     <select id="st" name="st">
                                         <option value=""<?= $fltStat === '' ? ' selected' : ''; ?>>All</option>
                                         <option value="1"<?= $fltStat === '1' ? ' selected' : ''; ?>>Published</option>
+                                        <option value="2"<?= $fltStat === '2' ? ' selected' : ''; ?>>Unlisted</option>
                                         <option value="0"<?= $fltStat === '0' ? ' selected' : ''; ?>>Draft</option>
                                     </select>
                                 </div>
@@ -470,6 +481,7 @@ declare(strict_types=1);
                                 <select name="status">
                                     <option value="0"<?= $st === 0 ? ' selected' : ''; ?>>Draft</option>
                                     <option value="1"<?= $st === 1 ? ' selected' : ''; ?>>Published</option>
+                                    <option value="2"<?= $st === 2 ? ' selected' : ''; ?>>Unlisted</option>
                                 </select>
                             </div>
                             <div>
@@ -494,106 +506,6 @@ declare(strict_types=1);
         <button type="button" class="media-lightbox-close" id="adminMediaLightboxClose" aria-label="Close">×</button>
         <img class="media-lightbox-img" id="adminMediaLightboxImg" alt="">
     </div>
-<!--
-    <style>
-        .admin-media-grid{
-            display:grid;
-            gap:14px;
-            grid-template-columns:repeat(1, minmax(0, 1fr));
-        }
-        @media (min-width: 768px){
-            .admin-media-grid{grid-template-columns:repeat(3, minmax(0, 1fr));}
-        }
-        @media (min-width: 1100px){
-            .admin-media-grid{grid-template-columns:repeat(4, minmax(0, 1fr));}
-        }
-
-        .admin-media-tile{
-            border:1px solid #e5e7eb;
-            border-radius:12px;
-            overflow:hidden;
-            background:#fff;
-        }
-        .admin-media-preview{
-            border-bottom:1px solid #e5e7eb;
-            background:#f9fafb;
-        }
-        .admin-media-preview img{
-            width:100%;
-            height:170px;
-            object-fit:cover;
-            display:block;
-        }
-        .admin-media-file{
-            height:170px;
-            display:flex;
-            flex-direction:column;
-            align-items:center;
-            justify-content:center;
-            padding:12px;
-            text-align:center;
-        }
-
-        .admin-media-actions{
-            display:flex;
-            gap:8px;
-            padding:10px 12px;
-            border-bottom:1px solid #e5e7eb;
-            background:#fff;
-        }
-
-        .admin-media-form{
-            padding:12px;
-        }
-        .admin-media-form input,
-        .admin-media-form select,
-        .admin-media-form textarea{
-            width:100%;
-            border:1px solid #d1d5db;
-            border-radius:8px;
-            padding:8px 10px;
-            font-size:14px;
-        }
-        .admin-media-form textarea{resize:vertical}
-        .admin-media-row{
-            display:grid;
-            grid-template-columns:1fr 1fr 100px;
-            gap:10px;
-            align-items:end;
-        }
-        .admin-media-meta{opacity:0.9}
-
-        .media-lightbox{
-            position:fixed;
-            inset:0;
-            background:rgba(0,0,0,0.88);
-            display:none;
-            align-items:center;
-            justify-content:center;
-            padding:20px;
-            z-index:9999;
-        }
-        .media-lightbox.is-open{display:flex}
-        .media-lightbox-img{
-            max-width:96vw;
-            max-height:92vh;
-            border-radius:10px;
-            border:1px solid rgba(255,255,255,0.15);
-        }
-        .media-lightbox-close{
-            position:absolute;
-            top:14px;
-            right:16px;
-            font-size:28px;
-            line-height:1;
-            border:0;
-            background:transparent;
-            color:#fff;
-            cursor:pointer;
-        }
-        body.media-lightbox-open{overflow:hidden}
-    </style>
--->
 </div>
     <script>
         (function(){

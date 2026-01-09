@@ -9,9 +9,14 @@ declare(strict_types=1);
  *   /media
  *
  * Shows published media from media_gallery/media_files in a grid.
- * - Public items (visibility=0) are visible to everyone
- * - Member items (visibility=2) are visible only when logged in
- * - Click any tile to open a simple lightbox (no deps)
+ *
+ * Rules:
+ * - visibility: 0=public, 2=members
+ * - status: 0=draft, 1=published, 2=unlisted
+ *
+ * Feed behavior:
+ * - Only status=1 appears in /media feed
+ * - Unlisted (status=2) stays accessible by direct URL (file path)
  */
 
 (function (): void {
@@ -37,11 +42,12 @@ declare(strict_types=1);
 
     $docroot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/\\');
 
-    // Published only. Public always. Members only when logged in.
+    // visibility filter: public always; members only if logged in
     $visSql = $loggedIn
         ? "g.visibility IN (0,2)"
         : "g.visibility = 0";
 
+    // Feed is "current": cap to 150
     $sql = "
         SELECT
             f.id,
@@ -52,13 +58,14 @@ declare(strict_types=1);
             g.title,
             g.caption,
             g.visibility,
+            g.status,
             g.sort_order
         FROM media_gallery g
         INNER JOIN media_files f ON f.id = g.file_id
         WHERE g.status = 1
           AND {$visSql}
         ORDER BY g.sort_order ASC, f.id DESC
-        LIMIT 240
+        LIMIT 150
     ";
 
     $items = [];
@@ -74,6 +81,10 @@ declare(strict_types=1);
 
     $isImageMime = static function (string $mime): bool {
         return (strpos($mime, 'image/') === 0);
+    };
+
+    $isVideoMime = static function (string $mime): bool {
+        return (strpos($mime, 'video/') === 0);
     };
 
     $h = static function (string $v): string {
@@ -107,7 +118,11 @@ declare(strict_types=1);
                     $url = '/' . $url;
                 }
 
-                $isImg = $isImageMime($mime) && $url !== '' && is_file($docroot . $url);
+                $fs = ($url !== '') ? ($docroot . $url) : '';
+                $exists = ($fs !== '' && is_file($fs));
+
+                $isImg = $exists && $isImageMime($mime);
+                $isVid = $exists && $isVideoMime($mime);
 
                 $label = $title !== '' ? $title : ($filename !== '' ? $filename : 'Media');
                 $meta  = ($vis === 2) ? 'Members' : 'Public';
@@ -117,6 +132,7 @@ declare(strict_types=1);
                     <a
                         class="media-tile"
                         href="<?= $h($url); ?>"
+                        data-media-type="image"
                         data-media-full="<?= $h($url); ?>"
                         data-media-alt="<?= $h($label); ?>"
                         data-media-title="<?= $h($title); ?>"
@@ -137,6 +153,37 @@ declare(strict_types=1);
 
                         <div class="media-pill"><?= $h($meta); ?></div>
                     </a>
+                <?php elseif ($isVid): ?>
+                    <a
+                        class="media-tile media-video-tile"
+                        href="<?= $h($url); ?>"
+                        data-media-type="video"
+                        data-media-full="<?= $h($url); ?>"
+                        data-media-alt="<?= $h($label); ?>"
+                        data-media-title="<?= $h($title); ?>"
+                        data-media-caption="<?= $h($caption); ?>"
+                    >
+                        <video
+                            src="<?= $h($url); ?>"
+                            muted
+                            playsinline
+                            preload="metadata"
+                        ></video>
+
+                        <?php if ($title !== '' || $caption !== ''): ?>
+                            <div class="media-overlay">
+                                <?php if ($title !== ''): ?>
+                                    <div class="media-overlay-title"><?= $h($title); ?></div>
+                                <?php endif; ?>
+                                <?php if ($caption !== ''): ?>
+                                    <div class="media-overlay-cap"><?= $h($caption); ?></div>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+
+                        <div class="media-pill"><?= $h($meta); ?></div>
+                        <div class="media-play">▶</div>
+                    </a>
                 <?php else: ?>
                     <a class="media-tile media-file-tile" href="<?= $h($url); ?>" target="_blank" rel="noopener">
                         <div class="media-file">
@@ -151,14 +198,16 @@ declare(strict_types=1);
         </div>
     </div>
 
-    <!-- Lightbox -->
+    <!-- Modal -->
     <div class="media-modal" id="mediaModal" aria-hidden="true">
         <div class="media-modal-backdrop" data-media-close="1"></div>
         <div class="media-modal-card" role="dialog" aria-modal="true">
             <button class="media-modal-close" type="button" data-media-close="1" aria-label="Close">×</button>
 
             <div class="media-modal-body">
-                <img id="mediaModalImg" alt="">
+                <img id="mediaModalImg" alt="" style="display:none;">
+                <video id="mediaModalVideo" controls playsinline style="display:none;"></video>
+
                 <div class="media-modal-meta" id="mediaModalMeta" style="display:none;">
                     <div class="media-modal-title" id="mediaModalTitle"></div>
                     <div class="media-modal-cap" id="mediaModalCap"></div>
@@ -168,166 +217,185 @@ declare(strict_types=1);
     </div>
 
     <style>
-        .media-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
+        .media-grid{
+            display:grid;
+            grid-template-columns:repeat(2, 1fr);
+            gap:12px;
         }
 
-        @media (min-width: 768px) {
-            .media-grid {
-                grid-template-columns: repeat(4, 1fr);
-            }
+        @media (min-width: 768px){
+            .media-grid{ grid-template-columns:repeat(4, 1fr); }
         }
 
-        @media (min-width: 1200px) {
-            .media-grid {
-                grid-template-columns: repeat(5, 1fr);
-            }
+        @media (min-width: 1200px){
+            .media-grid{ grid-template-columns:repeat(5, 1fr); }
         }
 
-        .media-tile {
-            display: block;
-            position: relative;
-            border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 12px;
-            overflow: hidden;
-            text-decoration: none;
-            color: inherit;
-            background: rgba(255,255,255,0.03);
+        .media-tile{
+            display:block;
+            position:relative;
+            border:1px solid rgba(255,255,255,0.12);
+            border-radius:12px;
+            overflow:hidden;
+            text-decoration:none;
+            color:inherit;
+            background:rgba(255,255,255,0.03);
         }
 
-        .media-tile img {
-            width: 100%;
-            height: 170px;
-            object-fit: cover;
-            display: block;
+        .media-tile:hover{
+            border-color:rgba(255,255,255,0.22);
         }
 
-        .media-tile:hover {
-            border-color: rgba(255,255,255,0.22);
+        .media-tile img,
+        .media-tile video{
+            width:100%;
+            height:170px;
+            object-fit:cover;
+            display:block;
         }
 
-        .media-overlay {
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            padding: 10px 10px 8px;
-            background: linear-gradient(to top, rgba(0,0,0,0.78), rgba(0,0,0,0.0));
-            color: #fff;
+        .media-video-tile video{
+            background:#111;
         }
 
-        .media-overlay-title {
-            font-size: 13px;
-            font-weight: 600;
-            line-height: 1.2;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+        .media-overlay{
+            position:absolute;
+            left:0;
+            right:0;
+            bottom:0;
+            padding:10px 10px 8px;
+            background:linear-gradient(to top, rgba(0,0,0,0.78), rgba(0,0,0,0.0));
+            color:#fff;
         }
 
-        .media-overlay-cap {
-            margin-top: 4px;
-            font-size: 12px;
-            line-height: 1.2;
-            opacity: 0.9;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
+        .media-overlay-title{
+            font-size:13px;
+            font-weight:600;
+            line-height:1.2;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
         }
 
-        .media-pill {
-            position: absolute;
-            top: 8px;
-            left: 8px;
-            font-size: 11px;
-            padding: 2px 8px;
-            border-radius: 999px;
-            border: 1px solid rgba(255,255,255,0.18);
-            background: rgba(0,0,0,0.35);
-            color: rgba(255,255,255,0.92);
-            pointer-events: none;
+        .media-overlay-cap{
+            margin-top:4px;
+            font-size:12px;
+            line-height:1.2;
+            opacity:0.9;
+            display:-webkit-box;
+            -webkit-line-clamp:2;
+            -webkit-box-orient:vertical;
+            overflow:hidden;
         }
 
-        .media-file {
-            height: 170px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            padding: 14px;
+        .media-pill{
+            position:absolute;
+            top:8px;
+            left:8px;
+            font-size:11px;
+            padding:2px 8px;
+            border-radius:999px;
+            border:1px solid rgba(255,255,255,0.18);
+            background:rgba(0,0,0,0.35);
+            color:rgba(255,255,255,0.92);
+            pointer-events:none;
         }
 
-        /* Lightbox */
-        .media-modal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            z-index: 9999;
+        .media-play{
+            position:absolute;
+            right:10px;
+            bottom:10px;
+            width:34px;
+            height:34px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            border-radius:12px;
+            border:1px solid rgba(255,255,255,0.18);
+            background:rgba(0,0,0,0.45);
+            color:#fff;
+            font-size:14px;
+            pointer-events:none;
         }
 
-        .media-modal[aria-hidden="false"] {
-            display: block;
+        .media-file{
+            height:170px;
+            display:flex;
+            flex-direction:column;
+            justify-content:center;
+            padding:14px;
         }
 
-        .media-modal-backdrop {
-            position: absolute;
-            inset: 0;
-            background: rgba(0,0,0,0.78);
+        /* Modal */
+        .media-modal{
+            display:none;
+            position:fixed;
+            inset:0;
+            z-index:9999;
         }
 
-        .media-modal-card {
-            position: relative;
-            width: min(1100px, calc(100vw - 24px));
-            margin: 60px auto;
-            border: 1px solid rgba(255,255,255,0.16);
-            border-radius: 14px;
-            background: rgba(10,10,10,0.88);
-            overflow: hidden;
+        .media-modal[aria-hidden="false"]{
+            display:block;
         }
 
-        .media-modal-close {
-            position: absolute;
-            top: 8px;
-            right: 10px;
-            width: 36px;
-            height: 36px;
-            border-radius: 10px;
-            border: 1px solid rgba(255,255,255,0.16);
-            background: rgba(0,0,0,0.35);
-            color: #fff;
-            font-size: 22px;
-            line-height: 1;
-            cursor: pointer;
+        .media-modal-backdrop{
+            position:absolute;
+            inset:0;
+            background:rgba(0,0,0,0.78);
         }
 
-        .media-modal-body {
-            padding: 14px;
+        .media-modal-card{
+            position:relative;
+            width:min(1100px, calc(100vw - 24px));
+            margin:60px auto;
+            border:1px solid rgba(255,255,255,0.16);
+            border-radius:14px;
+            background:rgba(10,10,10,0.88);
+            overflow:hidden;
         }
 
-        .media-modal-body img {
-            width: 100%;
-            height: auto;
-            max-height: 72vh;
-            object-fit: contain;
-            display: block;
-            border-radius: 10px;
-            background: rgba(255,255,255,0.02);
+        .media-modal-close{
+            position:absolute;
+            top:8px;
+            right:10px;
+            width:36px;
+            height:36px;
+            border-radius:10px;
+            border:1px solid rgba(255,255,255,0.16);
+            background:rgba(0,0,0,0.35);
+            color:#fff;
+            font-size:22px;
+            line-height:1;
+            cursor:pointer;
         }
 
-        .media-modal-meta {
-            margin-top: 10px;
-            color: rgba(255,255,255,0.92);
+        .media-modal-body{
+            padding:14px;
         }
 
-        .media-modal-title {
-            font-weight: 700;
+        .media-modal-body img,
+        .media-modal-body video{
+            width:100%;
+            height:auto;
+            max-height:72vh;
+            object-fit:contain;
+            display:block;
+            border-radius:10px;
+            background:rgba(255,255,255,0.02);
         }
 
-        .media-modal-cap {
-            margin-top: 4px;
-            opacity: 0.9;
+        .media-modal-meta{
+            margin-top:10px;
+            color:rgba(255,255,255,0.92);
+        }
+
+        .media-modal-title{
+            font-weight:700;
+        }
+
+        .media-modal-cap{
+            margin-top:4px;
+            opacity:0.9;
         }
     </style>
 
@@ -335,13 +403,12 @@ declare(strict_types=1);
         (function () {
             var modal = document.getElementById('mediaModal');
             var img = document.getElementById('mediaModalImg');
+            var vid = document.getElementById('mediaModalVideo');
             var meta = document.getElementById('mediaModalMeta');
             var title = document.getElementById('mediaModalTitle');
             var cap = document.getElementById('mediaModalCap');
 
-            function openModal(full, alt, t, c) {
-                img.src = full;
-                img.alt = alt || '';
+            function setMeta(t, c) {
                 title.textContent = t || '';
                 cap.textContent = c || '';
                 if ((t && t.trim() !== '') || (c && c.trim() !== '')) {
@@ -349,13 +416,53 @@ declare(strict_types=1);
                 } else {
                     meta.style.display = 'none';
                 }
+            }
+
+            function openImage(full, alt, t, c) {
+                if (vid) {
+                    vid.pause();
+                    vid.removeAttribute('src');
+                    vid.load();
+                    vid.style.display = 'none';
+                }
+
+                img.src = full;
+                img.alt = alt || '';
+                img.style.display = 'block';
+
+                setMeta(t, c);
+                modal.setAttribute('aria-hidden', 'false');
+            }
+
+            function openVideo(full, alt, t, c) {
+                img.removeAttribute('src');
+                img.alt = '';
+                img.style.display = 'none';
+
+                vid.style.display = 'block';
+                vid.setAttribute('src', full);
+                vid.setAttribute('aria-label', alt || '');
+                vid.load();
+
+                setMeta(t, c);
                 modal.setAttribute('aria-hidden', 'false');
             }
 
             function closeModal() {
                 modal.setAttribute('aria-hidden', 'true');
-                img.src = '';
-                img.alt = '';
+
+                if (img) {
+                    img.removeAttribute('src');
+                    img.alt = '';
+                    img.style.display = 'none';
+                }
+
+                if (vid) {
+                    vid.pause();
+                    vid.removeAttribute('src');
+                    vid.load();
+                    vid.style.display = 'none';
+                }
             }
 
             document.addEventListener('click', function (e) {
@@ -370,12 +477,19 @@ declare(strict_types=1);
                 if (!a) return;
 
                 e.preventDefault();
-                openModal(
-                    a.getAttribute('data-media-full'),
-                    a.getAttribute('data-media-alt'),
-                    a.getAttribute('data-media-title'),
-                    a.getAttribute('data-media-caption')
-                );
+
+                var type = a.getAttribute('data-media-type') || 'image';
+                var full = a.getAttribute('data-media-full') || '';
+                var alt = a.getAttribute('data-media-alt') || '';
+                var t = a.getAttribute('data-media-title') || '';
+                var c = a.getAttribute('data-media-caption') || '';
+
+                if (type === 'video') {
+                    openVideo(full, alt, t, c);
+                    return;
+                }
+
+                openImage(full, alt, t, c);
             });
 
             document.addEventListener('keydown', function (e) {
