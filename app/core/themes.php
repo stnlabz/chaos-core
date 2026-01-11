@@ -2,331 +2,194 @@
 declare(strict_types=1);
 
 /**
- * Chaos CMS — Themes
+ * /app/core/themes.php
  *
- * Contract:
- * - Core ALWAYS owns templates:
- *   /app/views/core/header.php
- *   /app/views/core/footer.php
+ * Core theme state + helpers:
+ * - Core CSS always loads.
+ * - Active theme CSS loads if present.
+ * - Core header/footer/nav views render by default.
+ * - A theme nav.php may override core nav.
  *
- * - Themes MAY override nav only:
- *   /public/themes/{theme}/nav.php
- *
- * - Themes own assets:
- *   /public/themes/{theme}/assets/css/theme.css (optional)
- *   /public/themes/{theme}/assets/js/theme.js   (optional)
- *
- * - Core assets:
- *   /public/assets/css/core.css (required)
- *   /public/assets/js/core.js   (optional)
- *
- * - Icons / Favicons:
- *   Theme may supply:
- *     /public/themes/{theme}/assets/icons/favicon.ico
- *     /public/themes/{theme}/assets/icons/favicon.png
- *     /public/themes/{theme}/assets/icons/apple-touch-icon.png
- *     /public/themes/{theme}/assets/icons/icon.svg
- *   Core fallback may supply:
- *     /public/assets/icons/favicon.ico
- *     /public/assets/icons/favicon.png
- *     /public/assets/icons/apple-touch-icon.png
- *     /public/assets/icons/icon.svg
- *
- * - Routing:
- *   Chaos routes from project root, so href() prefixes /public unless base_href is provided.
+ * IMPORTANT:
+ * - This class expects themes::init($configArray) (NOT a db object).
+ * - No env var magic. No bootstrap/router edits required.
  */
+
 final class themes
 {
     /**
      * @var array<string, mixed>
      */
-    private static array $state = [
-        'site_name'  => 'Chaos CMS',
-        'title'      => '',
-        'theme'      => '',
-        'base_href'  => '',
-        'body_class' => '',
-        'meta'       => [],
-    ];
+    private static array $state = [];
 
     /**
-     * @param array<string, mixed> $state
-     * @return void
+     * Init with config array (typically $config from bootstrap config include).
+     *
+     * Expected keys (optional):
+     * - site_name (string)
+     * - title (string)
+     * - body_class (string)
+     * - meta (array<string,string>)
+     * - site_theme (string)  e.g. "classic"
      */
     public static function init(array $state): void
     {
-        foreach ($state as $k => $v) {
-            self::$state[(string) $k] = $v;
-        }
-
-        $theme = (string) (self::$state['theme'] ?? '');
-        self::$state['theme'] = self::resolve_theme($theme);
-
-        // ---------------------------------------------------------
-        // Body class defaults (theme-driven)
-        // ---------------------------------------------------------
-        $body = trim((string) (self::$state['body_class'] ?? ''));
-
-        if ($body === '') {
-            $active = (string) (self::$state['theme'] ?? '');
-
-            // Shadow Witch theme expects "sw-body" on <body>
-            if ($active === 'shadow_witch') {
-                self::$state['body_class'] = 'sw-body';
-            } elseif ($active !== '') {
-                // Generic theme class if someone wants to target it
-                self::$state['body_class'] = $active;
-            }
-        }
+        self::$state = $state;
     }
 
     /**
-     * @param string $title
-     * @return void
-     */
-    public static function set_title(string $title): void
-    {
-        self::$state['title'] = $title;
-    }
-
-    /**
-     * @param string $key
+     * Read a value from theme state.
+     *
      * @return mixed
      */
-    public static function get(string $key): mixed
+    public static function get(string $key)
     {
         return self::$state[$key] ?? null;
     }
 
     /**
-     * Render header (CORE ONLY).
-     *
-     * @return void
+     * Active theme slug, derived from config.
+     */
+    public static function theme_slug(): string
+    {
+        $slug = (string) (self::$state['site_theme'] ?? '');
+        $slug = trim($slug);
+
+        if ($slug === '') {
+            return 'default';
+        }
+
+        // keep it safe
+        $slug = (string) preg_replace('~[^a-z0-9_\-]+~i', '', $slug);
+
+        return $slug !== '' ? $slug : 'default';
+    }
+
+    /**
+     * Backward-safe alias used by older header builds.
+     */
+    public static function active_slug(): string
+    {
+        return self::theme_slug();
+    }
+
+    /**
+     * Absolute filesystem path to theme directory if exists.
+     */
+    public static function theme_dir(): string
+    {
+        $docroot = rtrim((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\');
+        if ($docroot === '') {
+            return '';
+        }
+
+        $slug = self::theme_slug();
+        $dir  = $docroot . '/public/themes/' . $slug;
+
+        return is_dir($dir) ? $dir : '';
+    }
+
+    /**
+     * Returns a web href for a theme asset if it exists.
+     * Example: themes::href('assets/css/theme.css')
+     */
+    public static function href(string $path): string
+    {
+        $path = ltrim(trim($path), '/');
+        if ($path === '') {
+            return '';
+        }
+
+        $dir = self::theme_dir();
+        if ($dir === '') {
+            return '';
+        }
+
+        $full = $dir . '/' . $path;
+        if (!is_file($full)) {
+            return '';
+        }
+
+        return '/public/themes/' . self::theme_slug() . '/' . $path;
+    }
+
+    /**
+     * Render <link> tags for core + active theme CSS.
+     * Core always loads. Theme loads if file exists.
+     */
+    public static function css_links(): string
+    {
+        $out = '';
+
+        // core css (always)
+        $out .= '<link rel="stylesheet" href="/public/assets/css/core.css">' . PHP_EOL;
+
+        // theme css (if exists)
+        $themeCss = self::href('assets/css/theme.css');
+        if ($themeCss !== '') {
+            $out .= '<link rel="stylesheet" href="' . htmlspecialchars($themeCss, ENT_QUOTES, 'UTF-8') . '">' . PHP_EOL;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Render header view (core fallback).
      */
     public static function render_header(): void
     {
-        require self::project_root() . '/app/views/core/header.php';
+        $docroot = rtrim((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\');
+        if ($docroot === '') {
+            return;
+        }
+
+        $file = $docroot . '/app/views/core/header.php';
+        if (is_file($file)) {
+            require $file;
+        }
+    }
+
+    /**
+     * Render footer view (core fallback).
+     */
+    public static function render_footer(): void
+    {
+        $docroot = rtrim((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\');
+        if ($docroot === '') {
+            return;
+        }
+
+        $file = $docroot . '/app/views/core/footer.php';
+        if (is_file($file)) {
+            require $file;
+        }
     }
 
     /**
      * Render nav:
-     * - Theme override: /public/themes/{theme}/nav.php
-     * - Core fallback:  /app/views/core/nav.php
-     *
-     * @return void
+     * - If theme provides /public/themes/{slug}/nav.php, that overrides.
+     * - Else core nav view renders.
      */
     public static function render_nav(): void
     {
-        $theme = (string) (self::$state['theme'] ?? '');
+        $docroot = rtrim((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\');
+        if ($docroot === '') {
+            return;
+        }
 
-        if ($theme !== '') {
-            $themeNav = self::project_root() . '/public/themes/' . $theme . '/nav.php';
-
+        $themeDir = self::theme_dir();
+        if ($themeDir !== '') {
+            $themeNav = $themeDir . '/nav.php';
             if (is_file($themeNav)) {
                 require $themeNav;
                 return;
             }
         }
 
-        require self::project_root() . '/app/views/core/nav.php';
-    }
-
-    /**
-     * Render footer (CORE ONLY).
-     *
-     * @return void
-     */
-    public static function render_footer(): void
-    {
-        require self::project_root() . '/app/views/core/footer.php';
-    }
-
-    /**
-     * @return string
-     */
-    public static function css_links(): string
-    {
-        $out = '';
-
-        // Always: core css
-        $coreHref = htmlspecialchars(self::href('/assets/css/core.css'), ENT_QUOTES, 'UTF-8');
-        $out .= '<link rel="stylesheet" href="' . $coreHref . '">' . PHP_EOL;
-
-        // Optional: theme css (loads AFTER core, so it overrides)
-        $theme = (string) (self::$state['theme'] ?? '');
-        if ($theme !== '') {
-            $themeFs = self::project_root() . '/public/themes/' . $theme . '/assets/css/theme.css';
-
-            if (is_file($themeFs)) {
-                $themeHref = htmlspecialchars(self::href('/themes/' . $theme . '/assets/css/theme.css'), ENT_QUOTES, 'UTF-8');
-                $out .= '<link rel="stylesheet" href="' . $themeHref . '">' . PHP_EOL;
-            }
+        $coreNav = $docroot . '/app/views/core/nav.php';
+        if (is_file($coreNav)) {
+            require $coreNav;
         }
-
-        return $out;
-    }
-
-    /**
-     * @return string
-     */
-    public static function js_links(): string
-    {
-        $out = '';
-
-        // Optional: core js
-        $coreFs = self::project_root() . '/public/assets/js/core.js';
-
-        if (is_file($coreFs)) {
-            $coreSrc = htmlspecialchars(self::href('/assets/js/core.js'), ENT_QUOTES, 'UTF-8');
-            $out .= '<script src="' . $coreSrc . '"></script>' . PHP_EOL;
-        }
-
-        // Optional: theme js
-        $theme = (string) (self::$state['theme'] ?? '');
-        if ($theme !== '') {
-            $themeFs = self::project_root() . '/public/themes/' . $theme . '/assets/js/theme.js';
-
-            if (is_file($themeFs)) {
-                $themeSrc = htmlspecialchars(self::href('/themes/' . $theme . '/assets/js/theme.js'), ENT_QUOTES, 'UTF-8');
-                $out .= '<script src="' . $themeSrc . '"></script>' . PHP_EOL;
-            }
-        }
-
-        return $out;
-    }
-
-    /**
-     * Favicons / icons. Theme-first, then core fallback.
-     *
-     * @return string
-     */
-    public static function favicon_links(): string
-    {
-        $out = '';
-
-        $theme = (string) (self::$state['theme'] ?? '');
-
-        $tryTheme = static function (string $rel) use ($theme): string {
-            if ($theme === '') {
-                return '';
-            }
-
-            $fs = self::project_root() . '/public/themes/' . $theme . '/assets/icons/' . ltrim($rel, '/');
-            if (!is_file($fs)) {
-                return '';
-            }
-
-            return self::href('/themes/' . $theme . '/assets/icons/' . ltrim($rel, '/'));
-        };
-
-        $tryCore = static function (string $rel): string {
-            $fs = self::project_root() . '/public/assets/icons/' . ltrim($rel, '/');
-            if (!is_file($fs)) {
-                return '';
-            }
-
-            return self::href('/assets/icons/' . ltrim($rel, '/'));
-        };
-
-        $faviconIco = $tryTheme('favicon.ico');
-        if ($faviconIco === '') {
-            $faviconIco = $tryCore('favicon.ico');
-        }
-
-        $faviconPng = $tryTheme('favicon.png');
-        if ($faviconPng === '') {
-            $faviconPng = $tryCore('favicon.png');
-        }
-
-        $appleTouch = $tryTheme('apple-touch-icon.png');
-        if ($appleTouch === '') {
-            $appleTouch = $tryCore('apple-touch-icon.png');
-        }
-
-        $iconSvg = $tryTheme('icon.svg');
-        if ($iconSvg === '') {
-            $iconSvg = $tryCore('icon.svg');
-        }
-
-        if ($faviconIco !== '') {
-            $out .= '<link rel="icon" href="' . htmlspecialchars($faviconIco, ENT_QUOTES, 'UTF-8') . '">' . PHP_EOL;
-        }
-
-        if ($faviconPng !== '') {
-            $out .= '<link rel="icon" type="image/png" href="' . htmlspecialchars($faviconPng, ENT_QUOTES, 'UTF-8') . '">' . PHP_EOL;
-        }
-
-        if ($appleTouch !== '') {
-            $out .= '<link rel="apple-touch-icon" href="' . htmlspecialchars($appleTouch, ENT_QUOTES, 'UTF-8') . '">' . PHP_EOL;
-        }
-
-        if ($iconSvg !== '') {
-            $out .= '<link rel="icon" type="image/svg+xml" href="' . htmlspecialchars($iconSvg, ENT_QUOTES, 'UTF-8') . '">' . PHP_EOL;
-        }
-
-        return $out;
-    }
-
-    /**
-     * Build an href that ALWAYS targets /public as the web root for assets,
-     * unless base_href is explicitly provided.
-     *
-     * @param string $href
-     * @return string
-     */
-    public static function href(string $href): string
-    {
-        $href = (string) $href;
-
-        if ($href === '') {
-            return '';
-        }
-
-        if (str_starts_with($href, '/public/')) {
-            return $href;
-        }
-
-        $base = trim((string) (self::$state['base_href'] ?? ''));
-
-        if ($base !== '') {
-            return rtrim($base, '/') . $href;
-        }
-
-        return '/public' . $href;
-    }
-
-    /**
-     * @return string
-     */
-    private static function project_root(): string
-    {
-        if (defined('APP_ROOT')) {
-            return dirname((string) APP_ROOT);
-        }
-
-        return dirname(__DIR__, 2);
-    }
-
-    /**
-     * @param string $theme
-     * @return string
-     */
-    private static function resolve_theme(string $theme): string
-    {
-        $theme = trim($theme);
-        $theme = (string) preg_replace('~[^a-z0-9_\-]~i', '', $theme);
-
-        if ($theme === '' || strtolower($theme) === 'default') {
-            return '';
-        }
-
-        $dir = self::project_root() . '/public/themes/' . $theme;
-
-        if (!is_dir($dir)) {
-            return '';
-        }
-
-        return $theme;
     }
 }
 
