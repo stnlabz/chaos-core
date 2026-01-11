@@ -1,13 +1,11 @@
 # Chaos CMS Core
 
 ## Version
-v2.0.8
+v2.0.7
 
 ## Status
 **Stable**  
 Project is stable.
-
-THIS VERSION HAS NOT BEEN RELEASED
 
 ---
 
