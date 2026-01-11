@@ -1,0 +1,63 @@
+/* ==========================================================================
+   Chaos CMS Core UI Rules
+   This file defines non-negotiable system behaviors.
+   Themes may decorate around these rules but must not override them.
+   ========================================================================== */
+
+
+/* --------------------------------------------------------------------------
+   Share Bar (Utility, Not Promotion)
+   -------------------------------------------------------------------------- */
+
+.share-bar
+{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* Share links behave as neutral utilities */
+.share-bar a
+{
+    background: transparent !important;
+    border: 1px solid currentColor;
+    border-radius: 0;
+    box-shadow: none;
+    color: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.85rem;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+/* No brand colors, no hover theatrics */
+.share-bar a:hover,
+.share-bar a:focus
+{
+    background: transparent !important;
+    text-decoration: underline;
+}
+
+/* Icons inherit text color */
+.share-bar svg,
+.share-bar i
+{
+    fill: currentColor !important;
+    color: inherit !important;
+}
+
+/* Explicitly neutralize Bootstrap button bleed */
+.share-bar .btn,
+.share-bar [class*="btn-"]
+{
+    background: transparent !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}
+
