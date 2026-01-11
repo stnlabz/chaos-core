@@ -28,6 +28,71 @@ class plugins
      */
     public static function load_enabled(db $db): void
     {
+        // -----------------------------------------------------------------
+        // Core slot registry (MUST exist before any plugin init runs)
+        // -----------------------------------------------------------------
+        if (!function_exists('plugin_register_slot')) {
+            /**
+             * Register a callback to a named slot.
+             *
+             * @param string   $slot
+             * @param callable $cb
+             * @param int      $priority Lower runs first.
+             *
+             * @return void
+             */
+            function plugin_register_slot(string $slot, callable $cb, int $priority = 10): void
+            {
+                if (!isset($GLOBALS['CHAOS_PLUGIN_SLOTS']) || !is_array($GLOBALS['CHAOS_PLUGIN_SLOTS'])) {
+                    $GLOBALS['CHAOS_PLUGIN_SLOTS'] = [];
+                }
+
+                if (!isset($GLOBALS['CHAOS_PLUGIN_SLOTS'][$slot]) || !is_array($GLOBALS['CHAOS_PLUGIN_SLOTS'][$slot])) {
+                    $GLOBALS['CHAOS_PLUGIN_SLOTS'][$slot] = [];
+                }
+
+                $GLOBALS['CHAOS_PLUGIN_SLOTS'][$slot][] = [
+                    'priority' => $priority,
+                    'cb'       => $cb,
+                ];
+            }
+        }
+
+        if (!function_exists('plugin_slot')) {
+            /**
+             * Render all callbacks registered to a named slot.
+             *
+             * @param string $slot
+             *
+             * @return void
+             */
+            function plugin_slot(string $slot): void
+            {
+                $slots = $GLOBALS['CHAOS_PLUGIN_SLOTS'] ?? null;
+
+                if (!is_array($slots) || !isset($slots[$slot]) || !is_array($slots[$slot])) {
+                    return;
+                }
+
+                $items = $slots[$slot];
+
+                usort($items, static function (array $a, array $b): int {
+                    return (int) ($a['priority'] ?? 10) <=> (int) ($b['priority'] ?? 10);
+                });
+
+                foreach ($items as $it) {
+                    $cb = $it['cb'] ?? null;
+
+                    if (is_callable($cb)) {
+                        $cb();
+                    }
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // Normal plugin loading
+        // -----------------------------------------------------------------
         $conn = $db->connect();
         if ($conn === false) {
             return;

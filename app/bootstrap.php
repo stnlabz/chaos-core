@@ -2,7 +2,7 @@
 /**
  * Bootstrap
  * Pre loads Core and Lib
-*/
+ */
 
 declare(strict_types=1);
 
@@ -18,19 +18,19 @@ define('LOG_PATH', $ROOT . '/logs');
  * Used for development
  * set $debug = false to shut it off
  * or just delete the if()
-*/
+ */
 $debug = true;
-if($debug) {
+if ($debug) {
     // Error Logging
-    ini_set('display_errors', 1); // Hide from user
-    ini_set('log_errors', 1);     // Enable logging
+    ini_set('display_errors', '1'); // Hide from user
+    ini_set('log_errors', '1');     // Enable logging
     ini_set('error_log', LOG_PATH . '/site_errors.log');
 
     // Optional: set error reporting level
     error_reporting(E_ALL);
 
-    header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
-    header("Pragma: no-cache");
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
 }
 
 // -------------------------------------------------------------
@@ -47,13 +47,12 @@ foreach (glob($libPath . '/*.php') as $libFile) {
 // Autoload classes from /app/core and /app/lib
 // -------------------------------------------------------------
 spl_autoload_register(function ($class) {
-
     $core = __DIR__ . '/core/' . $class . '.php';
     if (is_file($core)) {
         require_once $core;
         return;
     }
-    
+
     $lib = __DIR__ . '/lib/' . $class . '.php';
     if (is_file($lib)) {
         require_once $lib;
@@ -64,7 +63,6 @@ spl_autoload_register(function ($class) {
 });
 
 $db = new db();
-//auth::ensure_users_table($db);
 $auth = new auth($db);
 modules::ensure_registry_tables($db);
 plugins::load_enabled($db);
@@ -172,8 +170,18 @@ if ($db instanceof db) {
     // 1) settings override (settings.name = site_theme)
     $row = $db->fetch("SELECT value FROM settings WHERE name='site_theme' LIMIT 1");
 
-    if (is_array($row) && isset($row['value']) && trim((string) $row['value']) !== '') {
-        $site_theme = trim((string) $row['value']);
+    $raw = '';
+    if (is_array($row) && isset($row['value'])) {
+        $raw = trim((string) $row['value']);
+    }
+
+    /**
+     * IMPORTANT:
+     * "default" is NOT a real theme override.
+     * It means: "use enabled theme if any, otherwise core fallback".
+     */
+    if ($raw !== '' && strtolower($raw) !== 'default') {
+        $site_theme = $raw;
     } else {
         // 2) enabled theme from themes table (schema: themes.slug, themes.enabled)
         $t = $db->fetch('SELECT slug FROM themes WHERE enabled=1 LIMIT 1');
@@ -186,10 +194,15 @@ if ($db instanceof db) {
 
 // sanitize slug
 $site_theme = (string) preg_replace('~[^a-z0-9_\-]~i', '', $site_theme);
-if ($site_theme === '') {
-    $site_theme = 'default';
-}
 
+require_once __DIR__ . '/core/themes.php';
+themes::init([
+    'site_name' => $site_name ?? 'Chaos CMS',
+    'theme'     => $site_theme ?? '',
+    'base_href' => $base_href ?? '',
+]);
+
+/**
 // filesystem fallback (truth wins)
 $docroot = rtrim((string) ($_SERVER['DOCUMENT_ROOT'] ?? dirname(__DIR__)), '/\\');
 $themePath = $docroot . '/public/themes/' . $site_theme;
@@ -197,16 +210,17 @@ $themePath = $docroot . '/public/themes/' . $site_theme;
 if (!is_dir($themePath)) {
     $site_theme = 'default';
 }
-
+*/
 /**
  * SEO
  * Automates the development and maintenance of SEO
  * sitemap.xml
  * ror.xml
-*/
+ */
 seo::run($site_theme);
 
 /**
  * Social Media Sharing
-*/
+ */
 require_once __DIR__ . '/lib/share.php';
+

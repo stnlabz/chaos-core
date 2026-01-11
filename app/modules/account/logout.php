@@ -3,7 +3,14 @@
 declare(strict_types=1);
 
 /**
- * Logout
+ * Chaos CMS DB
+ * Account Module: Logout
+ *
+ * Mapped route:
+ *   /logout -> /app/modules/account/logout.php
+ *
+ * Depends on:
+ *   - global $auth (instance of auth)
  */
 
 (function (): void {
@@ -13,7 +20,7 @@ declare(strict_types=1);
         $auth->logout();
     }
 
-    header('Location: /login');
+    header('Location: /');
     exit;
 })();
 

@@ -109,8 +109,14 @@ declare(strict_types=1);
     };
 
     $can_moderate = static function (array $u): bool {
-        $rid = (int)($u['role_id'] ?? 0);
-        return ($rid >= 3); // 3 moderator, 4 admin
+        $rid = (int) ($u['role_id'] ?? 0);
+
+        // 3 = moderator, 4 = admin
+        return ($rid === 3 || $rid === 4);
+    };
+
+    $is_admin = static function (array $u): bool {
+        return ((int) ($u['role_id'] ?? 0) === 4);
     };
 
     $csrf_ok = static function (): bool {
@@ -162,7 +168,7 @@ declare(strict_types=1);
     }
 
     // -------------------------------------------------------------
-    // Reply actions: add / delete
+    // Reply actions: add / delete / restore / purge + post hide/restore
     // -------------------------------------------------------------
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $slug !== '') {
         $action = (string)($_POST['action'] ?? '');
@@ -173,7 +179,7 @@ declare(strict_types=1);
             return;
         }
 
-        // Load post by slug first (needed for both add/delete)
+        // Load post by slug first (needed for actions)
         $stmtP = $conn->prepare("SELECT id, status, visibility FROM posts WHERE slug=? LIMIT 1");
         if ($stmtP === false) {
             http_response_code(500);
@@ -197,7 +203,7 @@ declare(strict_types=1);
         $postStatus = (int)($postRow['status'] ?? 0);
 
         // Basic gating: drafts + unlisted/members rules
-        if ($postStatus !== 1 && !$isLoggedIn) {
+        if ($postStatus !== 1 && (!$isLoggedIn || (int) ($u['role_id'] ?? 0) < 2)) {
             http_response_code(404);
             echo '<div class="container my-4"><div class="alert alert-secondary">Post not found.</div></div>';
             return;
@@ -210,6 +216,94 @@ declare(strict_types=1);
         if ($postVis === 1 && !$isLoggedIn) {
             http_response_code(404);
             echo '<div class="container my-4"><div class="alert alert-secondary">Post not found.</div></div>';
+            return;
+        }
+
+        if ($action === 'post_hide') {
+            if (!$isLoggedIn || !$can_moderate($u)) {
+                http_response_code(403);
+                echo '<div class="container my-4"><div class="alert alert-warning">Not allowed.</div></div>';
+                return;
+            }
+
+            $stmtH = $conn->prepare("UPDATE posts SET status=0, updated_at=UTC_TIMESTAMP() WHERE id=? LIMIT 1");
+            if ($stmtH !== false) {
+                $stmtH->bind_param('i', $postId);
+                $stmtH->execute();
+                $stmtH->close();
+            }
+
+            $js_redirect('/posts');
+            return;
+        }
+
+        if ($action === 'post_restore') {
+            if (!$isLoggedIn || !$is_admin($u)) {
+                http_response_code(403);
+                echo '<div class="container my-4"><div class="alert alert-warning">Not allowed.</div></div>';
+                return;
+            }
+
+            $stmtH = $conn->prepare("UPDATE posts SET status=1, updated_at=UTC_TIMESTAMP() WHERE id=? LIMIT 1");
+            if ($stmtH !== false) {
+                $stmtH->bind_param('i', $postId);
+                $stmtH->execute();
+                $stmtH->close();
+            }
+
+            $js_redirect('/posts/' . $slug);
+            return;
+        }
+
+        if ($action === 'reply_restore') {
+            if (!$isLoggedIn || !$is_admin($u)) {
+                http_response_code(403);
+                echo '<div class="container my-4"><div class="alert alert-warning">Not allowed.</div></div>';
+                return;
+            }
+
+            $rid = (string) ($_POST['reply_id'] ?? '');
+            if (!ctype_digit($rid)) {
+                $js_redirect('/posts/' . $slug);
+                return;
+            }
+
+            $replyId = (int) $rid;
+
+            $stmt = $conn->prepare("UPDATE post_replies SET status=1, updated_at=UTC_TIMESTAMP() WHERE id=? AND post_id=? LIMIT 1");
+            if ($stmt !== false) {
+                $stmt->bind_param('ii', $replyId, $postId);
+                $stmt->execute();
+                $stmt->close();
+            }
+
+            $js_redirect('/posts/' . $slug);
+            return;
+        }
+
+        if ($action === 'reply_purge') {
+            if (!$isLoggedIn || !$is_admin($u)) {
+                http_response_code(403);
+                echo '<div class="container my-4"><div class="alert alert-warning">Not allowed.</div></div>';
+                return;
+            }
+
+            $rid = (string) ($_POST['reply_id'] ?? '');
+            if (!ctype_digit($rid)) {
+                $js_redirect('/posts/' . $slug);
+                return;
+            }
+
+            $replyId = (int) $rid;
+
+            $stmt = $conn->prepare("DELETE FROM post_replies WHERE id=? AND post_id=? LIMIT 1");
+            if ($stmt !== false) {
+                $stmt->bind_param('ii', $replyId, $postId);
+                $stmt->execute();
+                $stmt->close();
+            }
+
+            $js_redirect('/posts/' . $slug);
             return;
         }
 
@@ -255,14 +349,14 @@ declare(strict_types=1);
                 $stmt->bind_param('iiisi', $postId, $parentId, $userId, $body, $replyVis);
             }
 
-            $ok = $stmt->execute();
+            $stmt->execute();
             $stmt->close();
 
             $js_redirect('/posts/' . $slug);
             return;
         }
 
-        // Delete reply (moderator/admin only)
+        // Hide reply (moderator/admin only)
         if ($action === 'reply_delete') {
             if (!$isLoggedIn || !$can_moderate($u)) {
                 http_response_code(403);
@@ -317,8 +411,8 @@ declare(strict_types=1);
         $visibility = (int)($post['visibility'] ?? 0);
         $status = (int)($post['status'] ?? 0);
 
-        // Draft gating
-        if ($status !== 1 && !$isLoggedIn) {
+        // Draft/hidden gating (status=0)
+        if ($status !== 1 && (!$isLoggedIn || (int) ($u['role_id'] ?? 0) < 2)) {
             http_response_code(404);
             echo '<div class="container my-4"><div class="alert alert-secondary">Post not found.</div></div>';
             return;
@@ -345,7 +439,9 @@ declare(strict_types=1);
         $excerpt = (string)($post['excerpt'] ?? '');
         $publishedAt = (string)($post['published_at'] ?? $post['created_at'] ?? '');
 
-        // Load replies (only active; apply visibility)
+        // Load replies (admins can see hidden + restore/purge)
+        $replyStatusSql = $is_admin($u) ? 'AND r.status IN (0,1)' : 'AND r.status = 1';
+
         $replySql = "
             SELECT
                 r.id,
@@ -363,7 +459,7 @@ declare(strict_types=1);
             INNER JOIN users u ON u.id = r.author_id
             LEFT JOIN roles rl ON rl.id = u.role_id
             WHERE r.post_id = ?
-              AND r.status = 1
+              {$replyStatusSql}
             ORDER BY r.id ASC
         ";
 
@@ -410,17 +506,35 @@ declare(strict_types=1);
                 </div>
                 <div class="share">
                 <?php
-        	if (function_exists('share_buttons')) {
-    			$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    			$host   = (string) ($_SERVER['HTTP_HOST'] ?? '');
-    			$uri    = (string) ($_SERVER['REQUEST_URI'] ?? '/');
+                    if (function_exists('share_buttons')) {
+                        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                        $host   = (string) ($_SERVER['HTTP_HOST'] ?? '');
+                        $uri    = (string) ($_SERVER['REQUEST_URI'] ?? '/');
 
-    			$absUrl = $scheme . '://' . $host . $uri;
+                        $absUrl = $scheme . '://' . $host . $uri;
 
-    			echo share_buttons($absUrl, (string) $post['title']);
-		}
+                        echo share_buttons($absUrl, (string) $post['title']);
+                    }
                 ?>
                 </div>
+                <?php if ($isLoggedIn && $can_moderate($u)): ?>
+                    <div class="post-mod mt-3">
+                        <?php if ((int) ($post['status'] ?? 0) === 1): ?>
+                            <form method="post" action="/posts/<?= $e($slug); ?>" onsubmit="return confirm('Hide this post from the public?');" style="display:inline;">
+                                <?= $csrf_field(); ?>
+                                <input type="hidden" name="action" value="post_hide">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Hide Post</button>
+                            </form>
+                        <?php elseif ($is_admin($u)): ?>
+                            <form method="post" action="/posts/<?= $e($slug); ?>" style="display:inline;">
+                                <?= $csrf_field(); ?>
+                                <input type="hidden" name="action" value="post_restore">
+                                <button type="submit" class="btn btn-sm btn-outline-secondary">Restore Post</button>
+                            </form>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
+
             </article>
 
             <section class="post-replies">
@@ -432,28 +546,49 @@ declare(strict_types=1);
                     <div class="reply-list">
                         <?php foreach ($replies as $r): ?>
                             <?php
-                            $rId = (int)($r['id'] ?? 0);
-                            $rUser = ucfirst((string)($r['username'] ?? ''));
-                            $rRole = (string)($r['role_label'] ?? '');
-                            $rCreated = (string)($r['created_at'] ?? '');
-                            $rBody = (string)($r['body'] ?? '');
+                            $rId = (int) ($r['id'] ?? 0);
+                            $rUser = ucfirst((string) ($r['username'] ?? ''));
+                            $rRole = (string) ($r['role_label'] ?? '');
+                            $rCreated = (string) ($r['created_at'] ?? '');
+                            $rBody = (string) ($r['body'] ?? '');
+                            $rStatus = (int) ($r['status'] ?? 1);
 
                             $roleTxt = $rRole !== '' ? ' ' . $rRole : '';
+                            $isHidden = ($rStatus === 0);
+                            $replyClass = $isHidden ? ' reply--hidden' : '';
                             ?>
-                            <div class="reply">
+                            <div class="reply<?= $replyClass; ?>">
                                 <div class="reply-head">
                                     <div class="reply-who">
                                         <strong><?= $e($rUser); ?></strong><?= $e($roleTxt); ?>
-                                        <span class="reply-time"><?= $e($rCreated); ?></span>
+                                        <span class="reply-time"><?= $e($rCreated); ?></span><?php if ($isHidden): ?> <span class="reply-hidden-tag">Hidden</span><?php endif; ?>
                                     </div>
 
-                                    <?php if ($isLoggedIn && $can_moderate($u)): ?>
+                                    <?php if ($isLoggedIn && $can_moderate($u) && !$isHidden): ?>
                                         <form method="post" class="reply-actions" action="/posts/<?= $e($slug); ?>">
                                             <?= $csrf_field(); ?>
                                             <input type="hidden" name="action" value="reply_delete">
-                                            <input type="hidden" name="reply_id" value="<?= (int)$rId; ?>">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                            <input type="hidden" name="reply_id" value="<?= (int) $rId; ?>">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">Hide</button>
                                         </form>
+                                    <?php endif; ?>
+
+                                    <?php if ($isLoggedIn && $is_admin($u) && $isHidden): ?>
+                                        <div class="reply-actions">
+                                            <form method="post" action="/posts/<?= $e($slug); ?>" style="display:inline;">
+                                                <?= $csrf_field(); ?>
+                                                <input type="hidden" name="action" value="reply_restore">
+                                                <input type="hidden" name="reply_id" value="<?= (int) $rId; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-secondary">Restore</button>
+                                            </form>
+
+                                            <form method="post" action="/posts/<?= $e($slug); ?>" onsubmit="return confirm('Permanently delete this reply?');" style="display:inline; margin-left:6px;">
+                                                <?= $csrf_field(); ?>
+                                                <input type="hidden" name="action" value="reply_purge">
+                                                <input type="hidden" name="reply_id" value="<?= (int) $rId; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                            </form>
+                                        </div>
                                     <?php endif; ?>
                                 </div>
 
@@ -507,6 +642,18 @@ declare(strict_types=1);
             .reply-time { display: inline-block; margin-left: 10px; font-size: .8rem; opacity: .7; }
             .reply-body { margin-top: 8px; font-size: .95rem; opacity: .92; line-height: 1.4; }
             .reply-actions { margin: 0; }
+            .post-mod { display:flex; gap:8px; align-items:center; }
+
+            .reply--hidden { opacity: 0.65; }
+            .reply-hidden-tag {
+                display: inline-block;
+                margin-left: 8px;
+                font-size: .75rem;
+                padding: 2px 8px;
+                border-radius: 999px;
+                border: 1px solid rgba(255,255,255,0.18);
+                opacity: .9;
+            }
         </style>
         <?php
         return;
@@ -586,5 +733,5 @@ declare(strict_types=1);
         .post-row-meta { margin-top: 8px; font-size:.85rem; opacity:.7; }
     </style>
     <?php
-})(); 
+})();
 
