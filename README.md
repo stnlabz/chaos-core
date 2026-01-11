@@ -7,6 +7,9 @@ v2.0.7
 **Stable**  
 Project is stable.
 
+## Main is Development
+Please see our releases.
+
 ---
 
 ## Summary
