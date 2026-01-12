@@ -4,156 +4,175 @@ declare(strict_types=1);
 
 /**
  * Chaos CMS Admin Router
- *
- * Routes:
- *   /admin
- *   /admin?action=dashboard|posts|media|pages|users|settings|themes|modules|plugins|maintenance|health|update|audit
- *
- * Role model (role_id):
- *  - 4: Admin (full)
- *  - 5: Creator (posts + media only)
- *  - 2: Editor  (posts + media only)
- *  - 3: Moderator (NO /admin)
- *  - 1: User (NO /admin)
+ * /admin?action=...
  */
 
-if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_start();
-}
+global $db, $auth;
 
-$docroot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? dirname(__DIR__, 2), '/\\');
-
-function admin_role_id(): int
-{
-    $rid = 0;
-
-    if (!empty($_SESSION['auth']) && is_array($_SESSION['auth'])) {
-        $rid = (int) ($_SESSION['auth']['role_id'] ?? 0);
-    }
-
-    return $rid;
-}
-
-function admin_require_auth(): void
-{
-    if (empty($_SESSION['auth']) || !is_array($_SESSION['auth']) || empty($_SESSION['auth']['id'])) {
-        header('Location: /login');
-        exit;
-    }
-}
-
-function admin_view(string $view): void
-{
-    $viewsDir = __DIR__ . '/views';
-    $path     = $viewsDir . '/' . $view . '.php';
-
-    if (!is_file($path)) {
-        http_response_code(404);
-        echo '<div class="admin-wrap"><div class="container my-4">';
-        echo '<div class="alert alert-danger">Admin view not found.</div>';
-        echo '</div></div>';
-        return;
-    }
-
-    require $path;
+if (!isset($auth) || !$auth instanceof auth || !$auth->check()) {
+    redirect_to('/login');
+    exit;
 }
 
 $action = (string) ($_GET['action'] ?? 'dashboard');
-$action = $action !== '' ? $action : 'dashboard';
 
-// everything else requires login
-admin_require_auth();
+$allowed = [
+    'dashboard',
+    'settings',
+    'pages',
+    'posts',
+    'media',
+    'users',
+    'themes',
+    'modules',
+    'plugins',
+    'maintenance',
+    'health',
+    'topics',
+    'roles',
+    'update',
 
-// -----------------------------------------------------------------------------
-// Role gate (see role model above)
-// -----------------------------------------------------------------------------
-$roleId = admin_role_id();
+    // dynamic admin hooks
+    'module_admin',
+    'plugin_admin',
+];
 
-// Moderators (3) do NOT use /admin. Users (1) do not either.
-// If someone has no role_id for any reason, treat as blocked.
-if ($roleId !== 4 && $roleId !== 2 && $roleId !== 5) {
-    http_response_code(403);
-    echo '<div class="admin-wrap"><div class="container my-4">';
-    echo '<div class="alert alert-warning">Forbidden</div>';
-    echo '</div></div>';
-    return;
+if (!in_array($action, $allowed, true)) {
+    $action = 'dashboard';
 }
 
-// Editors (2) + Creators (5) only get: dashboard, posts, media
-if ($roleId !== 4) {
-    $allowed = [
-        'dashboard' => true,
-        'posts'     => true,
-        'media'     => true,
-    ];
+$docroot  = rtrim((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\');
+$adminDir = $docroot . '/app/admin';
 
-    if (!isset($allowed[$action])) {
-        http_response_code(403);
+$h = static function (string $v): string {
+    return htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
+};
+
+$slug_clean = static function ($slug): string {
+    $slug = (string) $slug;
+    $slug = trim($slug);
+    $slug = strtolower($slug);
+    $slug = (string) preg_replace('~\s+~', '-', $slug);
+    $slug = (string) preg_replace('~[^a-z0-9_\-]~i', '', $slug);
+    return $slug;
+};
+
+$admin_hook_include = static function (string $kind) use ($docroot, $h, $slug_clean): void {
+    $slug = $slug_clean($_GET['slug'] ?? '');
+
+    if ($slug === '') {
         echo '<div class="admin-wrap"><div class="container my-4">';
-        echo '<div class="alert alert-warning">Forbidden</div>';
+        echo '<div class="alert alert-danger">Missing slug.</div>';
         echo '</div></div>';
         return;
     }
-}
 
-// -----------------------------------------------------------------------------
-// Router
-// -----------------------------------------------------------------------------
+    $candidates = [];
+
+    if ($kind === 'module') {
+        $candidates[] = $docroot . '/public/modules/' . $slug . '/admin/main.php';
+        $candidates[] = $docroot . '/app/modules/' . $slug . '/admin/main.php';
+        $candidates[] = $docroot . '/modules/' . $slug . '/admin/main.php';
+        $back  = '/admin?action=modules';
+        $label = 'Modules';
+    } else {
+        $candidates[] = $docroot . '/public/plugins/' . $slug . '/admin/main.php';
+        $candidates[] = $docroot . '/app/plugins/' . $slug . '/admin/main.php';
+        $candidates[] = $docroot . '/plugins/' . $slug . '/admin/main.php';
+        $back  = '/admin?action=plugins';
+        $label = 'Plugins';
+    }
+
+    $entry = '';
+    foreach ($candidates as $cand) {
+        if (is_string($cand) && $cand !== '' && is_file($cand)) {
+            $entry = $cand;
+            break;
+        }
+    }
+
+    if ($entry === '') {
+        echo '<div class="admin-wrap"><div class="container my-4">';
+        echo '<small><a href="' . $h($back) . '">' . $h($label) . '</a> &raquo; ' . $h($slug) . '</small>';
+        echo '<div class="alert alert-danger mt-2">Admin entry not found for <strong>' . $h($slug) . '</strong>.</div>';
+        echo '</div></div>';
+        return;
+    }
+
+    require $entry;
+};
+
+// ------------------------------------------------------------
+// Route
+// ------------------------------------------------------------
+
 switch ($action) {
     case 'dashboard':
-        admin_view('dashboard');
-        break;
-
-    case 'posts':
-        admin_view('posts');
-        break;
-
-    case 'media':
-        admin_view('media');
-        break;
-
-    case 'pages':
-        admin_view('pages');
-        break;
-
-    case 'users':
-        admin_view('users');
+        require $adminDir . '/views/dashboard.php';
         break;
 
     case 'settings':
-        admin_view('settings');
+        require $adminDir . '/views/settings.php';
+        break;
+
+    case 'pages':
+        require $adminDir . '/views/pages.php';
+        break;
+
+    case 'posts':
+        require $adminDir . '/views/posts.php';
+        break;
+
+    case 'media':
+        require $adminDir . '/views/media.php';
+        break;
+
+    case 'users':
+        require $adminDir . '/views/users.php';
         break;
 
     case 'themes':
-        admin_view('themes');
+        require $adminDir . '/views/themes.php';
         break;
 
     case 'modules':
-        admin_view('modules');
+        require $adminDir . '/views/modules.php';
         break;
 
     case 'plugins':
-        admin_view('plugins');
+        require $adminDir . '/views/plugins.php';
         break;
 
     case 'maintenance':
-        admin_view('maintenance');
+        require $adminDir . '/views/maintenance.php';
         break;
 
     case 'health':
-        admin_view('health');
+        require $adminDir . '/views/health.php';
+        break;
+
+    case 'topics':
+        require $adminDir . '/views/topics.php';
+        break;
+
+    case 'roles':
+        require $adminDir . '/views/roles.php';
         break;
 
     case 'update':
-        admin_view('update');
+        require $adminDir . '/views/update.php';
         break;
 
-    case 'audit':
-        admin_view('audit');
+    case 'module_admin':
+        $admin_hook_include('module');
+        break;
+
+    case 'plugin_admin':
+        $admin_hook_include('plugin');
         break;
 
     default:
-        admin_view('dashboard');
+        require $adminDir . '/views/dashboard.php';
         break;
 }
 
