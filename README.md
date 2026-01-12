@@ -8,7 +8,7 @@ v2.0.7
 Project is stable.
 
 ## Main is Development
-V2.0.8 is not stable as of yet, please use <a href='/releases/tag/2.0.7">v2.0.7</a>
+V2.0.8 is not stable as of yet, please use <a href="/releases/tag/2.0.7">v2.0.7</a>
 Please see our releases.
 
 ---
