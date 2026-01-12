@@ -8,6 +8,7 @@ v2.0.7
 Project is stable.
 
 ## Main is Development
+V2.0.8 is not stable as of yet, please use v2.0.7 in 
 Please see our releases.
 
 ---
