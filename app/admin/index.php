@@ -3,176 +3,178 @@
 declare(strict_types=1);
 
 /**
- * Chaos CMS Admin Router
- * /admin?action=...
+ * Chaos CMS DB
+ * Admin Router (ROUTER ONLY)
+ *
+ * IMPORTANT:
+ * - This file does NOT output header/footer.
+ * - It is wrapped by /app/admin/admin.php for styling + layout.
  */
 
-global $db, $auth;
+error_reporting(E_ALL);
+ini_set('display_errors', '1');
 
-if (!isset($auth) || !$auth instanceof auth || !$auth->check()) {
-    redirect_to('/login');
-    exit;
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
 }
 
-$action = (string) ($_GET['action'] ?? 'dashboard');
+$docroot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? dirname(__DIR__, 2), '/\\');
 
-$allowed = [
-    'dashboard',
-    'settings',
-    'pages',
-    'posts',
-    'media',
-    'users',
-    'themes',
-    'modules',
-    'plugins',
-    'maintenance',
-    'health',
-    'topics',
-    'roles',
-    'update',
-
-    // dynamic admin hooks
-    'module_admin',
-    'plugin_admin',
-];
-
-if (!in_array($action, $allowed, true)) {
-    $action = 'dashboard';
-}
-
-$docroot  = rtrim((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\');
-$adminDir = $docroot . '/app/admin';
-
-$h = static function (string $v): string {
-    return htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
-};
-
-$slug_clean = static function ($slug): string {
-    $slug = (string) $slug;
+function admin_slug(string $slug): string
+{
     $slug = trim($slug);
-    $slug = strtolower($slug);
-    $slug = (string) preg_replace('~\s+~', '-', $slug);
-    $slug = (string) preg_replace('~[^a-z0-9_\-]~i', '', $slug);
-    return $slug;
-};
+    $slug = preg_replace('~[^a-z0-9_\-]~i', '', $slug);
+    return (string)$slug;
+}
 
-$admin_hook_include = static function (string $kind) use ($docroot, $h, $slug_clean): void {
-    $slug = $slug_clean($_GET['slug'] ?? '');
+function admin_require_auth(): void
+{
+    global $auth;
 
-    if ($slug === '') {
-        echo '<div class="admin-wrap"><div class="container my-4">';
-        echo '<div class="alert alert-danger">Missing slug.</div>';
-        echo '</div></div>';
+    if (!$auth instanceof auth) {
+        http_response_code(500);
+        echo '<div class="container my-4"><div class="alert alert-danger">Auth core not available.</div></div>';
+        exit;
+    }
+
+    if (!$auth->check()) {
+        header('Location: /login');
+        exit;
+    }
+}
+
+function admin_view(string $view): void
+{
+    $path = __DIR__ . '/views/' . $view . '.php';
+
+    if (!is_file($path)) {
+        http_response_code(404);
+        echo '<div class="container my-4"><div class="alert alert-secondary">Admin view not found.</div></div>';
         return;
     }
 
-    $candidates = [];
+    require $path;
+}
+
+function admin_hook_include(string $kind, string $slug): void
+{
+    $docroot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? dirname(__DIR__, 2), '/\\');
+
+    $slug = admin_slug($slug);
+    if ($slug === '') {
+        http_response_code(400);
+        echo '<div class="container my-4"><div class="alert alert-danger">Missing slug.</div></div>';
+        return;
+    }
 
     if ($kind === 'module') {
-        $candidates[] = $docroot . '/public/modules/' . $slug . '/admin/main.php';
-        $candidates[] = $docroot . '/app/modules/' . $slug . '/admin/main.php';
-        $candidates[] = $docroot . '/modules/' . $slug . '/admin/main.php';
+        $entry = $docroot . '/public/modules/' . $slug . '/admin/main.php';
         $back  = '/admin?action=modules';
         $label = 'Modules';
     } else {
-        $candidates[] = $docroot . '/public/plugins/' . $slug . '/admin/main.php';
-        $candidates[] = $docroot . '/app/plugins/' . $slug . '/admin/main.php';
-        $candidates[] = $docroot . '/plugins/' . $slug . '/admin/main.php';
+        $entry = $docroot . '/public/plugins/' . $slug . '/admin/main.php';
         $back  = '/admin?action=plugins';
         $label = 'Plugins';
     }
 
-    $entry = '';
-    foreach ($candidates as $cand) {
-        if (is_string($cand) && $cand !== '' && is_file($cand)) {
-            $entry = $cand;
-            break;
-        }
+    echo '<div class="container my-4">';
+    echo '<small><a href="/admin">Admin</a> &raquo; <a href="' . htmlspecialchars($back, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</a> &raquo; ' . htmlspecialchars($slug, ENT_QUOTES, 'UTF-8') . '</small>';
+
+    if (is_file($entry)) {
+        echo '<h1 class="h3 mt-2 mb-3">' . htmlspecialchars($slug, ENT_QUOTES, 'UTF-8') . ' Admin</h1>';
+        require $entry;
+    } else {
+        echo '<div class="alert alert-secondary mt-3">No admin UI found at: <code>' . htmlspecialchars($entry, ENT_QUOTES, 'UTF-8') . '</code></div>';
     }
 
-    if ($entry === '') {
-        echo '<div class="admin-wrap"><div class="container my-4">';
-        echo '<small><a href="' . $h($back) . '">' . $h($label) . '</a> &raquo; ' . $h($slug) . '</small>';
-        echo '<div class="alert alert-danger mt-2">Admin entry not found for <strong>' . $h($slug) . '</strong>.</div>';
-        echo '</div></div>';
-        return;
+    echo '</div>';
+}
+
+/* ------------------------------------------------------------
+ * ROUTING
+ * ---------------------------------------------------------- */
+
+$action = (string)($_GET['action'] ?? 'dashboard');
+
+if ($action === 'logout') {
+    global $auth;
+    if ($auth instanceof auth) {
+        $auth->logout();
     }
+    header('Location: /login');
+    exit;
+}
 
-    require $entry;
-};
-
-// ------------------------------------------------------------
-// Route
-// ------------------------------------------------------------
+// everything else requires login
+admin_require_auth();
 
 switch ($action) {
     case 'dashboard':
-        require $adminDir . '/views/dashboard.php';
+        admin_view('dashboard');
         break;
 
     case 'settings':
-        require $adminDir . '/views/settings.php';
-        break;
-
-    case 'pages':
-        require $adminDir . '/views/pages.php';
-        break;
-
-    case 'posts':
-        require $adminDir . '/views/posts.php';
-        break;
-
-    case 'media':
-        require $adminDir . '/views/media.php';
-        break;
-
-    case 'users':
-        require $adminDir . '/views/users.php';
-        break;
-
-    case 'themes':
-        require $adminDir . '/views/themes.php';
+        admin_view('settings');
         break;
 
     case 'modules':
-        require $adminDir . '/views/modules.php';
+        admin_view('modules');
         break;
 
     case 'plugins':
-        require $adminDir . '/views/plugins.php';
+        admin_view('plugins');
+        break;
+
+    case 'themes':
+        admin_view('themes');
+        break;
+
+    case 'pages':
+        admin_view('pages');
+        break;
+
+    case 'media':
+        admin_view('media');
+        break;
+
+    case 'posts':
+        admin_view('posts');
+        break;
+
+    case 'users':
+        admin_view('users');
         break;
 
     case 'maintenance':
-        require $adminDir . '/views/maintenance.php';
-        break;
-
-    case 'health':
-        require $adminDir . '/views/health.php';
-        break;
-
-    case 'topics':
-        require $adminDir . '/views/topics.php';
-        break;
-
-    case 'roles':
-        require $adminDir . '/views/roles.php';
-        break;
-
-    case 'update':
-        require $adminDir . '/views/update.php';
+        admin_view('maintenance');
         break;
 
     case 'module_admin':
-        $admin_hook_include('module');
+        admin_hook_include('module', (string)($_GET['slug'] ?? ''));
         break;
 
     case 'plugin_admin':
-        $admin_hook_include('plugin');
+        admin_hook_include('plugin', (string)($_GET['slug'] ?? ''));
+        break;
+    case 'health':
+        admin_view('health');
+        break;
+    case 'update':
+        admin_view('update');
+        break;
+    case 'roles':
+        admin_view('roles');
+        break;
+    case 'topics':
+        admin_view('topics');
+        break;
+    case 'audit':
+        admin_view('audit');
         break;
 
     default:
-        require $adminDir . '/views/dashboard.php';
+        http_response_code(404);
+        echo '<div class="container my-4"><div class="alert alert-secondary">Unknown admin action.</div></div>';
         break;
 }
 
