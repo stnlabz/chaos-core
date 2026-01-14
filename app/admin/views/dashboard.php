@@ -179,7 +179,7 @@ if (!empty($tiles)) {
 
         echo '<div class="col-12 col-md-6 col-lg-3">';
         echo '  <div class="card"><div class="card-body">';
-        echo '    <div class="fw-semibold">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</div>';
+        echo '    <div class="fw-semibold"><strong>' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</strong></div>';
         echo '    <div class="text-muted small mb-2">' . $desc . '</div>';
         echo '    <a class="btn btn-sm" href="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '">Open</a>';
         echo '  </div></div>';
