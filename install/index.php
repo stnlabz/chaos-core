@@ -320,6 +320,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     [2, 'editor', 'Editor'],
                     [3, 'moderator', 'Moderator'],
                     [4, 'admin', 'Admin'],
+                    [5, 'creator', 'Creator'],
+                    [6, 'comptroller', 'Comptroller'],
                 ];
 
                 $stmtRole = $db->prepare(
@@ -362,12 +364,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                      VALUES ('site_theme', 'default')
                      ON DUPLICATE KEY UPDATE value=VALUES(value)"
                 );
-
+		/**
+		 * Removed in 2.0.8
                 $db->query(
                     "INSERT INTO themes (slug, installed, enabled, version, creator)
                      VALUES ('default', 1, 1, 'v0.0.0', 'stn-labz')
                      ON DUPLICATE KEY UPDATE installed=1, enabled=1"
                 );
+                */
 
                 $hash = password_hash($adminPass, PASSWORD_DEFAULT);
                 if (!is_string($hash) || $hash === '') {
