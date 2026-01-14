@@ -9,7 +9,7 @@ Project is stable.
 
 ## Main is Development
 
- - v2.0.8 is not stable as of yet, please use <a href="/releases/tag/2.0.7">v2.0.7</a>
+ - v2.0.8 is not released as of yet, please use <a href="/releases/tag/2.0.7">v2.0.7</a>
  - v2.0.8 regression has ended 2026-01-14
 ---
 
