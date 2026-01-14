@@ -692,108 +692,123 @@ a{
   }
 }
 
-/* 
-========================================================================== 
-Admin Media (Grid) — REQUIRED for media.php tiles
-No Bootstrap dependency. Keeps previews consistent for IMG + VIDEO.
-========================================================================== 
-*/
-
+/* Admin Media Grid */
 .admin-media-grid{
-  display:grid;
-  gap:14px;
-  grid-template-columns:repeat(1, minmax(0, 1fr));
+    display:grid;
+    gap:14px;
+    grid-template-columns:repeat(1, minmax(0, 1fr));
 }
 
 @media (min-width: 768px){
-  .admin-media-grid{
-    grid-template-columns:repeat(3, minmax(0, 1fr));
-  }
+    .admin-media-grid{grid-template-columns:repeat(3, minmax(0, 1fr));}
 }
 
 @media (min-width: 1100px){
-  .admin-media-grid{
-    grid-template-columns:repeat(4, minmax(0, 1fr));
-  }
+    .admin-media-grid{grid-template-columns:repeat(4, minmax(0, 1fr));}
 }
 
 .admin-media-tile{
-  border:1px solid var(--admin-border);
-  border-radius:12px;
-  overflow:hidden;
-  background:var(--admin-card-bg);
-  box-shadow:var(--admin-shadow);
+    border:1px solid #e5e7eb;
+    border-radius:12px;
+    overflow:hidden;
+    background:#fff;
 }
 
 .admin-media-preview{
-  border-bottom:1px solid rgba(15,23,42,.10);
-  background:rgba(15,23,42,.02);
+    border-bottom:1px solid #e5e7eb;
+    background:#f9fafb;
 }
 
 .admin-media-preview img{
-  width:100%;
-  height:170px;
-  object-fit:cover;
-  display:block;
-}
-
-.admin-media-preview video{
-  width:100%;
-  height:170px;
-  object-fit:cover;
-  display:block;
-  background:#111;
+    width:100%;
+    height:170px;
+    object-fit:cover;
+    display:block;
 }
 
 .admin-media-file{
-  height:170px;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  padding:12px;
-  text-align:center;
+    height:170px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:12px;
+    text-align:center;
 }
 
 .admin-media-actions{
-  display:flex;
-  gap:8px;
-  padding:10px 12px;
-  border-bottom:1px solid rgba(15,23,42,.10);
-  background:var(--admin-card-bg);
+    display:flex;
+    gap:8px;
+    padding:10px 12px;
+    border-bottom:1px solid #e5e7eb;
+    background:#fff;
 }
 
 .admin-media-form{
-  padding:12px;
+    padding:12px;
 }
 
 .admin-media-form input,
 .admin-media-form select,
 .admin-media-form textarea{
-  width:100%;
-  border:1px solid var(--admin-border);
-  border-radius:10px;
-  padding:9px 10px;
-  font-size:14px;
-  background:#ffffff;
-  color:var(--admin-text);
+    width:100%;
+    border:1px solid #d1d5db;
+    border-radius:8px;
+    padding:8px 10px;
+    font-size:14px;
 }
 
-.admin-media-form textarea{
-  resize:vertical;
-  min-height:80px;
-}
+.admin-media-form textarea{resize:vertical}
 
 .admin-media-row{
-  display:grid;
-  grid-template-columns:1fr 1fr 100px;
-  gap:10px;
-  align-items:end;
+    display:grid;
+    grid-template-columns:1fr 1fr 100px;
+    gap:10px;
+    align-items:end;
 }
 
-@media (max-width: 520px){
-  .admin-media-row{
-    grid-template-columns:1fr;
-  }
+.admin-media-meta{opacity:0.9}
+
+/* Admin lightbox (also fixes “full screen distortion”) */
+.media-lightbox-img{
+    max-width:96vw;
+    max-height:92vh;
+    width:auto;
+    height:auto;
+    object-fit:contain;
+    border-radius:10px;
+    border:1px solid rgba(255,255,255,0.15);
 }
 
+.admin-media-preview.video{
+    position:relative;
+    background:#000;
+}
+
+.admin-media-preview.video video{
+    width:100%;
+    height:170px;
+    object-fit:cover;
+    display:block;
+    pointer-events:none;
+}
+
+.admin-media-preview.video::after{
+    content:'▶';
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:42px;
+    color:#fff;
+    background:rgba(0,0,0,0.35);
+}
+
+/* Admin media preview: keep video tiles same height as image tiles */
+.admin-media-preview video{
+    width:100%;
+    height:170px;
+    object-fit:cover;
+    display:block;
+}

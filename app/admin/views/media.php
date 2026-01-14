@@ -414,6 +414,7 @@ declare(strict_types=1);
                 $rel  = $safe_rel((string) ($it['rel_path'] ?? ''));
                 $mime = (string) ($it['mime'] ?? '');
                 $isImg = $is_image_mime($mime) && $rel !== '' && is_file($docroot . $rel);
+                $isVid = (strpos($mime, 'video/') === 0) && $rel !== '' && is_file($docroot . $rel);
 
                 $title = (string) ($it['title'] ?? '');
                 $caption = (string) ($it['caption'] ?? '');
@@ -428,6 +429,12 @@ declare(strict_types=1);
                         <?php if ($isImg && $url !== ''): ?>
                             <a href="<?= $h($url); ?>" class="admin-media-open" data-full="<?= $h($url); ?>" data-alt="<?= $h($title !== '' ? $title : $it['filename']); ?>">
                                 <img src="<?= $h($url); ?>" alt="">
+                            </a>
+                        <?php elseif ($isVid && $url !== ''): ?>
+                            <a href="<?= $h($url); ?>" target="_blank" rel="noopener" class="admin-media-video">
+                                <video muted preload="metadata">
+                                    <source src="<?= $h($url); ?>" type="<?= $h($mime); ?>">
+                                </video>
                             </a>
                         <?php else: ?>
                             <div class="admin-media-file">
@@ -663,4 +670,5 @@ declare(strict_types=1);
     </script>
     <?php
 })();
+
 

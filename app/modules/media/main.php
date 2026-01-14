@@ -377,8 +377,9 @@ declare(strict_types=1);
         .media-modal-body img {
             max-width: 92vw;
             max-height: 78vh;
-            width: 100%;
+            width: auto;
             height: auto;
+            object-fit: contain;
             border-radius: 10px;
             display: block;
             background: #000;
@@ -447,9 +448,12 @@ declare(strict_types=1);
         .media-modal-body video{
             max-width:92vw;
             max-height:78vh;
-            width:100%;
+            width:auto;
+            height:auto;
+            object-fit:contain;
             border-radius:10px;
             background:#000;
+            display:block;
         }
     </style>
 
@@ -542,4 +546,5 @@ declare(strict_types=1);
     </script>
     <?php
 })();
+
 
