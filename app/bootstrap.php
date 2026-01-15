@@ -6,6 +6,16 @@
 
 declare(strict_types=1);
 
+// ------------------------------------------------------------
+// Security Headers (MUST - prevents common attacks)
+// ------------------------------------------------------------
+if (!headers_sent()) {
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: SAMEORIGIN');
+    header('X-XSS-Protection: 1; mode=block');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+}
+
 // Definitions
 if (!defined('APP_ROOT')) {
     define('APP_ROOT', dirname(__DIR__) . '/app');
@@ -22,8 +32,8 @@ define('LOG_PATH', $ROOT . '/logs');
 $debug = true;
 if ($debug) {
     // Error Logging
-    ini_set('display_errors', '1'); // Hide from user
-    ini_set('log_errors', '1');     // Enable logging
+    ini_set('display_errors', '1');
+    ini_set('log_errors', '1');
     ini_set('error_log', LOG_PATH . '/site_errors.log');
 
     // Optional: set error reporting level
@@ -40,7 +50,7 @@ if ($debug) {
 $libPath = __DIR__ . '/lib';
 
 foreach (glob($libPath . '/*.php') as $libFile) {
-    require_once $libFile;   // load all lib functions automatically
+    require_once $libFile;
 }
 
 // -------------------------------------------------------------
@@ -203,15 +213,6 @@ themes::init([
 ]);
 
 /**
-// filesystem fallback (truth wins)
-$docroot = rtrim((string) ($_SERVER['DOCUMENT_ROOT'] ?? dirname(__DIR__)), '/\\');
-$themePath = $docroot . '/public/themes/' . $site_theme;
-
-if (!is_dir($themePath)) {
-    $site_theme = 'default';
-}
-*/
-/**
  * SEO
  * Automates the development and maintenance of SEO
  * sitemap.xml
@@ -223,4 +224,3 @@ seo::run($site_theme);
  * Social Media Sharing
  */
 require_once __DIR__ . '/lib/share.php';
-
