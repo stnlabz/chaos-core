@@ -295,29 +295,41 @@ final class themes
     /**
      * Build an href that ALWAYS targets /public as the web root for assets,
      * unless base_href is explicitly provided.
+     * 
+     * FIXED: Now handles admin routes and absolute paths correctly.
      *
      * @param string $href
      * @return string
      */
     public static function href(string $href): string
     {
-        $href = (string) $href;
+        $href = trim((string) $href);
 
         if ($href === '') {
             return '';
         }
 
+        // Already absolute or protocol-relative - return as-is
+        if (str_starts_with($href, 'http://') || 
+            str_starts_with($href, 'https://') || 
+            str_starts_with($href, '//')) {
+            return $href;
+        }
+
+        // Already starts with /public/ - return as-is
         if (str_starts_with($href, '/public/')) {
             return $href;
         }
 
+        // Check for explicit base_href override
         $base = trim((string) (self::$state['base_href'] ?? ''));
 
         if ($base !== '') {
-            return rtrim($base, '/') . $href;
+            return rtrim($base, '/') . '/' . ltrim($href, '/');
         }
 
-        return '/public' . $href;
+        // Default: prefix with /public
+        return '/public/' . ltrim($href, '/');
     }
 
     /**
@@ -354,4 +366,3 @@ final class themes
         return $theme;
     }
 }
-
