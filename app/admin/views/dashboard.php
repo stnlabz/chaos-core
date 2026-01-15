@@ -166,6 +166,7 @@ if ($isAdmin) {
         ['Maintenance', 'System &amp; SEO', '/admin?action=maintenance'],
         ['Health', 'System reporting', '/admin?action=health'],
         ['Audit', 'Admin review queue', '/admin?action=audit'],
+        ['Finance', 'Site Financial Ledger', '/admin?action=finance'],
         ['Update', 'Version &amp; update', '/admin?action=update'],
     ];
 }
