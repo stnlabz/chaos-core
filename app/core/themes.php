@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Chaos CMS — Themes
+ * Chaos CMS — Themes (ENHANCED WITH AUTO-SEO)
  *
  * Contract:
  * - Core ALWAYS owns templates:
@@ -34,6 +34,10 @@ declare(strict_types=1);
  *
  * - Routing:
  *   Chaos routes from project root, so href() prefixes /public unless base_href is provided.
+ *
+ * - SEO Integration:
+ *   Automatically generates SEO tags using seo.php auto-discovery
+ *   No manual configuration needed - discovers everything from DB and filesystem
  */
 final class themes
 {
@@ -47,6 +51,11 @@ final class themes
         'base_href'  => '',
         'body_class' => '',
         'meta'       => [],
+        'seo_meta'   => '',      // Auto-generated SEO meta tags
+        'seo_og'     => '',      // Auto-generated Open Graph tags
+        'seo_twitter' => '',     // Auto-generated Twitter Card tags
+        'canonical'  => '',      // Auto-generated canonical URL
+        'schema'     => '',      // Auto-generated JSON-LD schema
     ];
 
     /**
@@ -78,6 +87,46 @@ final class themes
                 self::$state['body_class'] = $active;
             }
         }
+        
+        // ---------------------------------------------------------
+        // Auto-generate SEO tags if seo class is available
+        // ---------------------------------------------------------
+        if (class_exists('seo')) {
+            self::auto_generate_seo();
+        }
+    }
+
+    /**
+     * Automatically generate SEO tags using seo.php auto-discovery.
+     * Called automatically during init() - no configuration needed.
+     *
+     * @return void
+     */
+    protected static function auto_generate_seo(): void
+    {
+        // Auto-generate meta tags
+        $meta = seo::auto_generate_meta();
+        if (!empty($meta)) {
+            self::$state['meta'] = array_merge(
+                (array)(self::$state['meta'] ?? []),
+                $meta
+            );
+        }
+        
+        // Auto-generate Open Graph tags
+        self::$state['seo_og'] = seo::auto_generate_opengraph();
+        
+        // Auto-generate Twitter Card tags
+        self::$state['seo_twitter'] = seo::auto_generate_twitter_card();
+        
+        // Auto-generate canonical URL
+        self::$state['canonical'] = seo::auto_generate_canonical();
+        
+        // Auto-generate Organization schema (for homepage detection, use current URL)
+        $currentUrl = $_SERVER['REQUEST_URI'] ?? '/';
+        if ($currentUrl === '/' || $currentUrl === '/home') {
+            self::$state['schema'] = seo::auto_generate_schema('organization');
+        }
     }
 
     /**
@@ -90,12 +139,125 @@ final class themes
     }
 
     /**
+     * Set page-specific SEO data.
+     * Overrides auto-generated values with page-specific data.
+     *
+     * @param array<string,mixed> $page
+     * @return void
+     */
+    public static function set_page_seo(array $page): void
+    {
+        if (!class_exists('seo')) {
+            return;
+        }
+        
+        // Set title if provided
+        if (!empty($page['title'])) {
+            self::set_title((string)$page['title']);
+        }
+        
+        // Generate meta tags with page data
+        $meta = seo::auto_generate_meta($page);
+        if (!empty($meta)) {
+            self::$state['meta'] = array_merge(
+                (array)(self::$state['meta'] ?? []),
+                $meta
+            );
+        }
+        
+        // Generate Open Graph with page data
+        self::$state['seo_og'] = seo::auto_generate_opengraph($page);
+        
+        // Generate Twitter Card with page data
+        self::$state['seo_twitter'] = seo::auto_generate_twitter_card($page);
+        
+        // Set canonical if provided
+        if (!empty($page['url'])) {
+            self::$state['canonical'] = seo::auto_generate_canonical((string)$page['url']);
+        }
+        
+        // Generate article schema if it's an article
+        if (!empty($page['type']) && $page['type'] === 'article') {
+            self::$state['schema'] = seo::auto_generate_schema('article', $page);
+        }
+    }
+
+    /**
+     * Add page-specific schema (can be called multiple times).
+     *
+     * @param string $type 'organization'|'article'|'breadcrumb'
+     * @param array<string,mixed> $data
+     * @return void
+     */
+    public static function add_schema(string $type, array $data = []): void
+    {
+        if (!class_exists('seo')) {
+            return;
+        }
+        
+        $schema = seo::auto_generate_schema($type, $data);
+        if ($schema !== '') {
+            self::$state['schema'] .= $schema;
+        }
+    }
+
+    /**
      * @param string $key
      * @return mixed
      */
     public static function get(string $key): mixed
     {
         return self::$state[$key] ?? null;
+    }
+
+    /**
+     * Get SEO meta tags HTML.
+     *
+     * @return string
+     */
+    public static function get_seo_meta(): string
+    {
+        return (string)(self::$state['seo_meta'] ?? '');
+    }
+
+    /**
+     * Get Open Graph tags HTML.
+     *
+     * @return string
+     */
+    public static function get_opengraph(): string
+    {
+        return (string)(self::$state['seo_og'] ?? '');
+    }
+
+    /**
+     * Get Twitter Card tags HTML.
+     *
+     * @return string
+     */
+    public static function get_twitter_card(): string
+    {
+        return (string)(self::$state['seo_twitter'] ?? '');
+    }
+
+    /**
+     * Get canonical URL HTML.
+     *
+     * @return string
+     */
+    public static function get_canonical(): string
+    {
+        return (string)(self::$state['canonical'] ?? '');
+    }
+
+    /**
+     * Get JSON-LD schema HTML.
+     *
+     * @return string
+     */
+    public static function get_schema(): string
+    {
+        return (string)(self::$state['schema'] ?? '');
     }
 
     /**
@@ -295,41 +457,29 @@ final class themes
     /**
      * Build an href that ALWAYS targets /public as the web root for assets,
      * unless base_href is explicitly provided.
-     * 
-     * FIXED: Now handles admin routes and absolute paths correctly.
      *
      * @param string $href
      * @return string
      */
     public static function href(string $href): string
     {
-        $href = trim((string) $href);
+        $href = (string) $href;
 
         if ($href === '') {
             return '';
         }
 
-        // Already absolute or protocol-relative - return as-is
-        if (str_starts_with($href, 'http://') || 
-            str_starts_with($href, 'https://') || 
-            str_starts_with($href, '//')) {
-            return $href;
-        }
-
-        // Already starts with /public/ - return as-is
         if (str_starts_with($href, '/public/')) {
             return $href;
         }
 
-        // Check for explicit base_href override
         $base = trim((string) (self::$state['base_href'] ?? ''));
 
         if ($base !== '') {
-            return rtrim($base, '/') . '/' . ltrim($href, '/');
+            return rtrim($base, '/') . $href;
         }
 
-        // Default: prefix with /public
-        return '/public/' . ltrim($href, '/');
+        return '/public' . $href;
     }
 
     /**

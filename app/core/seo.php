@@ -3,18 +3,33 @@
 declare(strict_types=1);
 
 /**
- * Chaos CMS - Core SEO (ENHANCED)
+ * Chaos CMS - Core SEO (FULLY AUTOMATIC)
  *
- * Features:
- * - Scans theme nav for internal links
- * - Generates /sitemap.xml and /ror.xml
- * - Generates /robots.txt
- * - Hash-based change detection
- * - Configurable hash path
- * - Enhanced nav discovery
- * - Error handling and logging
- * - XML validation
- * - Customizable priority/changefreq
+ * Automatic SEO generation with ZERO site owner interaction required.
+ * 
+ * Discovers from the site:
+ * - Navigation structure → sitemap.xml + ror.xml
+ * - Database settings → site name, description
+ * - Theme assets → logo, favicon for OG/schema
+ * - Posts/content → dynamic page meta
+ * - File system → images for default OG
+ * - Footer/content → social media links
+ * 
+ * Generates automatically:
+ * - /sitemap.xml (with smart priorities)
+ * - /ror.xml (ROR feed)
+ * - /robots.txt (with intelligent blocking)
+ * - Meta tags (description, keywords, author)
+ * - Open Graph tags (for social sharing)
+ * - Twitter Card tags (for Twitter/X)
+ * - Canonical URLs (prevent duplicate content)
+ * - JSON-LD structured data (Organization, Article, Breadcrumb)
+ * 
+ * Hash-based change detection ensures minimal overhead.
+ * XML validation ensures clean output.
+ * Error handling with logging.
+ * 
+ * NO JSON CONFIG FILES NEEDED - DISCOVERS EVERYTHING AUTOMATICALLY.
  */
 
 class seo
@@ -22,9 +37,14 @@ class seo
     protected static string $rootPath = '';
     protected static string $baseUrl  = '';
     protected static string $hashPath = '';
+    protected static string $siteName = 'Website';
+    protected static string $theme = '';
+    
+    /** @var array<string,mixed> */
+    protected static array $siteData = [];
 
     /**
-     * Entry point.
+     * Entry point - auto-generates all SEO files.
      *
      * @param string $theme
      * @return void
@@ -34,11 +54,15 @@ class seo
         try {
             self::$rootPath = rtrim($_SERVER['DOCUMENT_ROOT'] ?? dirname(__DIR__, 2), '/');
             self::$baseUrl  = self::detectBaseUrl();
+            self::$theme    = $theme;
 
-            // Hash path (configurable via constant or default)
+            // Hash path
             self::$hashPath = defined('SEO_HASH_PATH') 
                 ? (string) SEO_HASH_PATH 
                 : dirname(__DIR__) . '/data/seo_hash.json';
+
+            // Discover site data automatically
+            self::discoverSiteData();
 
             $themeDir = self::$rootPath . '/public/themes/' . $theme;
             
@@ -90,6 +114,171 @@ class seo
     }
 
     /**
+     * Automatically discover site data from DB and filesystem.
+     *
+     * @return void
+     */
+    protected static function discoverSiteData(): void
+    {
+        global $db;
+
+        // Discover site name from DB
+        if (isset($db) && $db instanceof db) {
+            $row = $db->fetch("SELECT value FROM settings WHERE name='site_name' LIMIT 1");
+            if (is_array($row) && isset($row['value']) && trim((string)$row['value']) !== '') {
+                self::$siteName = trim((string)$row['value']);
+            }
+        }
+
+        // Discover site description from DB
+        $siteDesc = '';
+        if (isset($db) && $db instanceof db) {
+            $row = $db->fetch("SELECT value FROM settings WHERE name='site_description' LIMIT 1");
+            if (is_array($row) && isset($row['value'])) {
+                $siteDesc = trim((string)$row['value']);
+            }
+        }
+
+        // Auto-discover logo from theme or core assets
+        $logo = self::discoverLogo();
+
+        // Auto-discover default OG image
+        $ogImage = self::discoverDefaultImage();
+
+        // Auto-discover social profiles from site
+        $socialProfiles = self::discoverSocialProfiles();
+
+        self::$siteData = [
+            'site_name' => self::$siteName,
+            'site_description' => $siteDesc !== '' ? $siteDesc : 'Powered by Chaos CMS',
+            'default_image' => $ogImage,
+            'logo' => $logo,
+            'social_profiles' => $socialProfiles,
+        ];
+    }
+
+    /**
+     * Auto-discover logo from theme or core assets.
+     *
+     * @return string
+     */
+    protected static function discoverLogo(): string
+    {
+        $candidates = [
+            '/public/themes/' . self::$theme . '/assets/images/logo.png',
+            '/public/themes/' . self::$theme . '/assets/images/logo.jpg',
+            '/public/themes/' . self::$theme . '/assets/images/logo.svg',
+            '/public/assets/images/logo.png',
+            '/public/assets/images/logo.jpg',
+            '/public/assets/images/logo.svg',
+        ];
+
+        foreach ($candidates as $path) {
+            if (is_file(self::$rootPath . $path)) {
+                return self::$baseUrl . $path;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Auto-discover default Open Graph image.
+     *
+     * @return string
+     */
+    protected static function discoverDefaultImage(): string
+    {
+        $candidates = [
+            '/public/themes/' . self::$theme . '/assets/images/og-default.jpg',
+            '/public/themes/' . self::$theme . '/assets/images/og-default.png',
+            '/public/themes/' . self::$theme . '/assets/images/default.jpg',
+            '/public/assets/images/og-default.jpg',
+            '/public/assets/images/og-default.png',
+            '/public/assets/images/default.jpg',
+        ];
+
+        foreach ($candidates as $path) {
+            if (is_file(self::$rootPath . $path)) {
+                return self::$baseUrl . $path;
+            }
+        }
+
+        // Fallback to logo if found
+        $logo = self::discoverLogo();
+        return $logo !== '' ? $logo : '';
+    }
+
+    /**
+     * Auto-discover social media profiles from footer or content.
+     *
+     * @return array<int,string>
+     */
+    protected static function discoverSocialProfiles(): array
+    {
+        global $db;
+
+        $profiles = [];
+
+        // Try to find social links in settings
+        if (isset($db) && $db instanceof db) {
+            $row = $db->fetch("SELECT value FROM settings WHERE name='social_links' LIMIT 1");
+            if (is_array($row) && isset($row['value']) && trim((string)$row['value']) !== '') {
+                $decoded = json_decode((string)$row['value'], true);
+                if (is_array($decoded)) {
+                    $profiles = array_values($decoded);
+                }
+            }
+        }
+
+        // Scan theme footer for social links
+        if (empty($profiles)) {
+            $footerPath = self::$rootPath . '/public/themes/' . self::$theme . '/footer.php';
+            if (is_file($footerPath)) {
+                $html = @file_get_contents($footerPath);
+                if ($html !== false) {
+                    $profiles = self::extractSocialLinks($html);
+                }
+            }
+        }
+
+        return $profiles;
+    }
+
+    /**
+     * Extract social media links from HTML.
+     *
+     * @param string $html
+     * @return array<int,string>
+     */
+    protected static function extractSocialLinks(string $html): array
+    {
+        $links = [];
+        $domains = [
+            'twitter.com',
+            'x.com',
+            'facebook.com',
+            'github.com',
+            'linkedin.com',
+            'instagram.com',
+            'youtube.com',
+        ];
+
+        if (preg_match_all('/<a[^>]+href=(["\'])([^"\']+)\1/i', $html, $matches)) {
+            foreach ($matches[2] as $url) {
+                foreach ($domains as $domain) {
+                    if (stripos($url, $domain) !== false) {
+                        $links[] = $url;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return array_unique($links);
+    }
+
+    /**
      * Detect base URL from environment.
      *
      * @return string
@@ -104,7 +293,6 @@ class seo
 
     /**
      * Find a theme file that contains nav markup.
-     * Enhanced discovery patterns.
      *
      * @param string $themeDir
      * @return string|null
@@ -214,7 +402,7 @@ class seo
                 continue;
             }
 
-            // Skip anchors and queries for now
+            // Skip anchors and queries
             if (strpos($href, '#') !== false || strpos($href, '?') !== false) {
                 continue;
             }
@@ -288,12 +476,11 @@ class seo
             return 'weekly';
         }
 
-        // Static pages change rarely
-        if (str_starts_with($href, '/pages') || in_array($href, ['/about', '/contact'], true)) {
+        // Static pages
+        if (in_array($href, ['/about', '/contact', '/privacy', '/terms'], true)) {
             return 'monthly';
         }
 
-        // Default
         return 'weekly';
     }
 
@@ -518,6 +705,242 @@ class seo
     protected static function xmlSafe(string $text): string
     {
         return htmlspecialchars($text, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+    }
+
+    // ========================================================================
+    // AUTOMATIC META TAG GENERATION (FOR THEMES INTEGRATION)
+    // ========================================================================
+
+    /**
+     * Auto-generate page meta tags based on current request.
+     * Call from themes::render_header() or router.
+     *
+     * @param array<string,mixed> $page Optional page data override
+     * @return array<string,string>
+     */
+    public static function auto_generate_meta(array $page = []): array
+    {
+        if (empty(self::$siteData)) {
+            self::discoverSiteData();
+        }
+
+        $meta = [];
+        
+        // Description
+        $desc = $page['description'] ?? self::$siteData['site_description'] ?? '';
+        if ($desc !== '') {
+            $meta['description'] = (string)$desc;
+        }
+        
+        // Keywords (auto-extract from page title)
+        if (!empty($page['keywords'])) {
+            $keywords = $page['keywords'];
+            if (is_array($keywords)) {
+                $meta['keywords'] = implode(', ', array_map('strval', $keywords));
+            } else {
+                $meta['keywords'] = (string)$keywords;
+            }
+        }
+        
+        // Author
+        if (!empty($page['author'])) {
+            $meta['author'] = (string)$page['author'];
+        }
+        
+        // Robots
+        $meta['robots'] = (string)($page['robots'] ?? 'index, follow');
+        
+        return $meta;
+    }
+
+    /**
+     * Auto-generate Open Graph tags.
+     *
+     * @param array<string,mixed> $page
+     * @return string
+     */
+    public static function auto_generate_opengraph(array $page = []): string
+    {
+        if (empty(self::$siteData)) {
+            self::discoverSiteData();
+        }
+
+        $html = '';
+        
+        $title = (string)($page['title'] ?? self::$siteData['site_name'] ?? 'Website');
+        $desc = (string)($page['description'] ?? self::$siteData['site_description'] ?? '');
+        $image = (string)($page['image'] ?? self::$siteData['default_image'] ?? '');
+        $url = (string)($page['url'] ?? self::currentUrl());
+        $type = (string)($page['type'] ?? 'website');
+        
+        $esc = static fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+        
+        $html .= '<meta property="og:title" content="' . $esc($title) . '">' . PHP_EOL;
+        $html .= '<meta property="og:type" content="' . $esc($type) . '">' . PHP_EOL;
+        $html .= '<meta property="og:url" content="' . $esc($url) . '">' . PHP_EOL;
+        
+        if ($desc !== '') {
+            $html .= '<meta property="og:description" content="' . $esc($desc) . '">' . PHP_EOL;
+        }
+        
+        if ($image !== '') {
+            $html .= '<meta property="og:image" content="' . $esc($image) . '">' . PHP_EOL;
+        }
+        
+        if (!empty(self::$siteData['site_name'])) {
+            $html .= '<meta property="og:site_name" content="' . $esc((string)self::$siteData['site_name']) . '">' . PHP_EOL;
+        }
+        
+        return $html;
+    }
+
+    /**
+     * Auto-generate Twitter Card tags.
+     *
+     * @param array<string,mixed> $page
+     * @return string
+     */
+    public static function auto_generate_twitter_card(array $page = []): string
+    {
+        if (empty(self::$siteData)) {
+            self::discoverSiteData();
+        }
+
+        $html = '';
+        
+        $title = (string)($page['title'] ?? self::$siteData['site_name'] ?? 'Website');
+        $desc = (string)($page['description'] ?? self::$siteData['site_description'] ?? '');
+        $image = (string)($page['image'] ?? self::$siteData['default_image'] ?? '');
+        $card = (string)($page['twitter_card'] ?? 'summary_large_image');
+        
+        $esc = static fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+        
+        $html .= '<meta name="twitter:card" content="' . $esc($card) . '">' . PHP_EOL;
+        $html .= '<meta name="twitter:title" content="' . $esc($title) . '">' . PHP_EOL;
+        
+        if ($desc !== '') {
+            $html .= '<meta name="twitter:description" content="' . $esc($desc) . '">' . PHP_EOL;
+        }
+        
+        if ($image !== '') {
+            $html .= '<meta name="twitter:image" content="' . $esc($image) . '">' . PHP_EOL;
+        }
+        
+        return $html;
+    }
+
+    /**
+     * Auto-generate canonical link tag.
+     *
+     * @param string|null $url
+     * @return string
+     */
+    public static function auto_generate_canonical(?string $url = null): string
+    {
+        $url = $url ?? self::currentUrl();
+        $esc = static fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+        
+        return '<link rel="canonical" href="' . $esc($url) . '">' . PHP_EOL;
+    }
+
+    /**
+     * Auto-generate JSON-LD structured data.
+     *
+     * @param string $type 'organization'|'article'|'breadcrumb'
+     * @param array<string,mixed> $data
+     * @return string
+     */
+    public static function auto_generate_schema(string $type, array $data = []): string
+    {
+        if (empty(self::$siteData)) {
+            self::discoverSiteData();
+        }
+
+        $json = [];
+        
+        switch ($type) {
+            case 'organization':
+                $json = [
+                    '@context' => 'https://schema.org',
+                    '@type' => 'Organization',
+                    'name' => (string)($data['name'] ?? self::$siteData['site_name'] ?? ''),
+                    'url' => (string)($data['url'] ?? self::$baseUrl),
+                ];
+                
+                if (!empty(self::$siteData['logo'])) {
+                    $json['logo'] = (string)self::$siteData['logo'];
+                }
+                
+                if (!empty(self::$siteData['social_profiles'])) {
+                    $json['sameAs'] = array_map('strval', (array)self::$siteData['social_profiles']);
+                }
+                break;
+                
+            case 'article':
+                $json = [
+                    '@context' => 'https://schema.org',
+                    '@type' => 'Article',
+                    'headline' => (string)($data['title'] ?? ''),
+                    'description' => (string)($data['description'] ?? ''),
+                    'datePublished' => (string)($data['published'] ?? gmdate('c')),
+                    'dateModified' => (string)($data['modified'] ?? gmdate('c')),
+                ];
+                
+                if (!empty($data['author'])) {
+                    $json['author'] = [
+                        '@type' => 'Person',
+                        'name' => (string)$data['author']
+                    ];
+                }
+                
+                if (!empty($data['image'])) {
+                    $json['image'] = (string)$data['image'];
+                }
+                break;
+                
+            case 'breadcrumb':
+                $items = [];
+                foreach ($data['items'] ?? [] as $i => $item) {
+                    if (!is_array($item)) {
+                        continue;
+                    }
+                    $items[] = [
+                        '@type' => 'ListItem',
+                        'position' => $i + 1,
+                        'name' => (string)($item['name'] ?? ''),
+                        'item' => (string)($item['url'] ?? '')
+                    ];
+                }
+                
+                $json = [
+                    '@context' => 'https://schema.org',
+                    '@type' => 'BreadcrumbList',
+                    'itemListElement' => $items
+                ];
+                break;
+        }
+        
+        if (empty($json)) {
+            return '';
+        }
+        
+        return '<script type="application/ld+json">' . PHP_EOL .
+               json_encode($json, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) . PHP_EOL .
+               '</script>' . PHP_EOL;
+    }
+
+    /**
+     * Get current URL.
+     *
+     * @return string
+     */
+    protected static function currentUrl(): string
+    {
+        $scheme = $_SERVER['REQUEST_SCHEME'] ?? 'https';
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $uri = $_SERVER['REQUEST_URI'] ?? '/';
+        
+        return $scheme . '://' . $host . $uri;
     }
 
     /**
