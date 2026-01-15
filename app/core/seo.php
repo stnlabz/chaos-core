@@ -3,18 +3,20 @@
 declare(strict_types=1);
 
 /**
- * Chaos CMS DB — Core SEO
+ * Chaos CMS - Core SEO (ENHANCED)
  *
- * Core-only:
- *  - Scan active theme nav for internal links (href starting with "/").
- *  - Generate:
- *      /sitemap.xml
- *      /ror.xml
- *  - Track changes via:
- *      /app/data/seo.hash
- *
- * No JSON nav, no plugins, no admin dependency.
+ * Features:
+ * - Scans theme nav for internal links
+ * - Generates /sitemap.xml and /ror.xml
+ * - Generates /robots.txt
+ * - Hash-based change detection
+ * - Configurable hash path
+ * - Enhanced nav discovery
+ * - Error handling and logging
+ * - XML validation
+ * - Customizable priority/changefreq
  */
+
 class seo
 {
     protected static string $rootPath = '';
@@ -24,51 +26,67 @@ class seo
     /**
      * Entry point.
      *
-     * Call from bootstrap AFTER $theme is set:
-     *
-     *   require_once __DIR__ . '/core/seo.php';
-     *   if (php_sapi_name() !== 'cli') {
-     *       seo::run($theme);
-     *   }
-     *
      * @param string $theme
      * @return void
      */
     public static function run(string $theme): void
     {
-        self::$rootPath = rtrim($_SERVER['DOCUMENT_ROOT'] ?? dirname(__DIR__, 2), '/');
-        self::$baseUrl  = self::detectBaseUrl();
+        try {
+            self::$rootPath = rtrim($_SERVER['DOCUMENT_ROOT'] ?? dirname(__DIR__, 2), '/');
+            self::$baseUrl  = self::detectBaseUrl();
 
-        // Hash lives in /app/data/seo.hash
-        self::$hashPath = dirname(__DIR__) . '/data/seo_hash.json';
+            // Hash path (configurable via constant or default)
+            self::$hashPath = defined('SEO_HASH_PATH') 
+                ? (string) SEO_HASH_PATH 
+                : dirname(__DIR__) . '/data/seo_hash.json';
 
-        $themeDir = self::$rootPath . '/public/themes/' . $theme;
-        if (!is_dir($themeDir)) {
-            return;
+            $themeDir = self::$rootPath . '/public/themes/' . $theme;
+            
+            if (!is_dir($themeDir)) {
+                self::log('Theme directory not found: ' . $theme);
+                return;
+            }
+
+            $navFile = self::findNavFile($themeDir);
+            
+            if ($navFile === null) {
+                self::log('No nav file found in theme: ' . $theme);
+                return;
+            }
+
+            $html = @file_get_contents($navFile);
+            
+            if ($html === false || $html === '') {
+                self::log('Could not read nav file: ' . $navFile);
+                return;
+            }
+
+            $links = self::extractLinks($html, self::$baseUrl);
+            
+            if (empty($links)) {
+                self::log('No internal links found in nav');
+                return;
+            }
+
+            if (!self::needsRegeneration($links)) {
+                return; // No changes, skip regeneration
+            }
+
+            // Generate files
+            $sitemapOk = self::writeSitemap(self::$rootPath, $links);
+            $rorOk = self::writeRor(self::$rootPath, $links);
+            $robotsOk = self::writeRobots(self::$rootPath);
+
+            if ($sitemapOk && $rorOk && $robotsOk) {
+                self::writeHash($links);
+                self::log('SEO files generated successfully');
+            } else {
+                self::log('SEO generation completed with errors');
+            }
+
+        } catch (\Throwable $e) {
+            self::log('SEO generation failed: ' . $e->getMessage());
         }
-
-        $navFile = self::findNavFile($themeDir);
-        if ($navFile === null) {
-            return;
-        }
-
-        $html = file_get_contents($navFile);
-        if ($html === false || $html === '') {
-            return;
-        }
-
-        $links = self::extractLinks($html, self::$baseUrl);
-        if (empty($links)) {
-            return;
-        }
-
-        if (!self::needsRegeneration($links)) {
-            return;
-        }
-
-        self::writeSitemap(self::$rootPath, $links);
-        self::writeRor(self::$rootPath, $links);
-        self::writeHash($links);
     }
 
     /**
@@ -85,58 +103,95 @@ class seo
     }
 
     /**
-     * Find a theme file that clearly contains nav markup.
+     * Find a theme file that contains nav markup.
+     * Enhanced discovery patterns.
      *
      * @param string $themeDir
      * @return string|null
      */
     protected static function findNavFile(string $themeDir): ?string
     {
-        $it = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator(
-                $themeDir,
-                \RecursiveDirectoryIterator::SKIP_DOTS
-            )
-        );
+        // Priority order: nav.php, header.php, then scan all
+        $priorityFiles = [
+            $themeDir . '/nav.php',
+            $themeDir . '/header.php',
+        ];
 
-        /** @var \SplFileInfo $file */
-        foreach ($it as $file) {
-            if (!$file->isFile()) {
-                continue;
+        foreach ($priorityFiles as $file) {
+            if (is_file($file)) {
+                $html = @file_get_contents($file);
+                if ($html !== false && self::hasNavMarkup($html)) {
+                    return $file;
+                }
             }
+        }
 
-            if (strtolower($file->getExtension()) !== 'php') {
-                continue;
-            }
+        // Scan all PHP files
+        try {
+            $it = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator(
+                    $themeDir,
+                    \RecursiveDirectoryIterator::SKIP_DOTS
+                )
+            );
 
-            $path = $file->getPathname();
-            $html = file_get_contents($path);
-            if ($html === false || $html === '') {
-                continue;
-            }
+            foreach ($it as $file) {
+                if (!$file->isFile()) {
+                    continue;
+                }
 
-            if (
-                strpos($html, '<nav') !== false ||
-                strpos($html, 'navbar-nav') !== false ||
-                preg_match('/<a[^>]+href=("|\')\//i', $html)
-            ) {
-                return $path;
+                if (strtolower($file->getExtension()) !== 'php') {
+                    continue;
+                }
+
+                $html = @file_get_contents($file->getPathname());
+                
+                if ($html !== false && self::hasNavMarkup($html)) {
+                    return $file->getPathname();
+                }
             }
+        } catch (\Throwable $e) {
+            self::log('Nav file scan failed: ' . $e->getMessage());
         }
 
         return null;
     }
 
     /**
-     * Extract internal links from nav HTML.
+     * Check if HTML contains nav markup.
      *
-     * Only hrefs that:
-     *  - start with "/"
-     * are included.
+     * @param string $html
+     * @return bool
+     */
+    protected static function hasNavMarkup(string $html): bool
+    {
+        $patterns = [
+            '<nav',
+            'navbar',
+            'menu',
+            'navigation',
+            '<ul',
+            '<li',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (stripos($html, $pattern) !== false) {
+                // Verify it has internal links
+                if (preg_match('/<a[^>]+href=("|\')\//i', $html)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Extract internal links from HTML.
      *
      * @param string $html
      * @param string $base
-     * @return array<int,array{title:string,href:string,updated:string}>
+     * @return array<int,array{title:string,href:string,updated:string,priority:float,changefreq:string}>
      */
     protected static function extractLinks(string $html, string $base): array
     {
@@ -153,7 +208,14 @@ class seo
 
         foreach ($matches as $m) {
             $href = trim((string) $m[2]);
+            
+            // Only internal links starting with /
             if ($href === '' || $href[0] !== '/') {
+                continue;
+            }
+
+            // Skip anchors and queries for now
+            if (strpos($href, '#') !== false || strpos($href, '?') !== false) {
                 continue;
             }
 
@@ -164,20 +226,81 @@ class seo
 
             $full = rtrim($base, '/') . $href;
 
+            // Determine priority and changefreq based on URL
+            $priority = self::getPriority($href);
+            $changefreq = self::getChangefreq($href);
+
             $links[] = [
-                'title'   => $text,
-                'href'    => $full,
-                'updated' => gmdate('c'),
+                'title'      => $text,
+                'href'       => $full,
+                'updated'    => gmdate('c'),
+                'priority'   => $priority,
+                'changefreq' => $changefreq,
             ];
         }
 
-        return $links;
+        // Remove duplicates
+        $unique = [];
+        foreach ($links as $link) {
+            $unique[$link['href']] = $link;
+        }
+
+        return array_values($unique);
     }
 
     /**
-     * Decide if we need to regenerate based on hash of links.
+     * Get priority for URL (0.0 to 1.0).
      *
-     * @param array<int,array{title:string,href:string,updated:string}> $links
+     * @param string $href
+     * @return float
+     */
+    protected static function getPriority(string $href): float
+    {
+        // Home page
+        if ($href === '/' || $href === '/home') {
+            return 1.0;
+        }
+
+        // Important sections
+        if (in_array($href, ['/posts', '/pages', '/media', '/about', '/contact'], true)) {
+            return 0.8;
+        }
+
+        // Default
+        return 0.5;
+    }
+
+    /**
+     * Get changefreq for URL.
+     *
+     * @param string $href
+     * @return string
+     */
+    protected static function getChangefreq(string $href): string
+    {
+        // Home page changes frequently
+        if ($href === '/' || $href === '/home') {
+            return 'daily';
+        }
+
+        // Posts/news change often
+        if (str_starts_with($href, '/posts') || str_starts_with($href, '/news')) {
+            return 'weekly';
+        }
+
+        // Static pages change rarely
+        if (str_starts_with($href, '/pages') || in_array($href, ['/about', '/contact'], true)) {
+            return 'monthly';
+        }
+
+        // Default
+        return 'weekly';
+    }
+
+    /**
+     * Check if regeneration is needed.
+     *
+     * @param array<int,array{title:string,href:string,updated:string,priority:float,changefreq:string}> $links
      * @return bool
      */
     protected static function needsRegeneration(array $links): bool
@@ -187,150 +310,267 @@ class seo
         }
 
         $current  = sha1((string) json_encode($links));
-        $existing = trim((string) file_get_contents(self::$hashPath));
+        $existing = @file_get_contents(self::$hashPath);
+
+        if ($existing === false) {
+            return true;
+        }
+
+        $existing = trim($existing);
 
         return $existing !== $current;
     }
 
     /**
-     * Write hash to /app/data/seo.hash
+     * Write hash file.
      *
-     * @param array<int,array{title:string,href:string,updated:string}> $links
+     * @param array<int,array{title:string,href:string,updated:string,priority:float,changefreq:string}> $links
      * @return void
      */
     protected static function writeHash(array $links): void
     {
         $dir = dirname(self::$hashPath);
+        
         if (!is_dir($dir)) {
-            mkdir($dir, 0775, true);
+            @mkdir($dir, 0775, true);
         }
 
         $hash = sha1((string) json_encode($links));
-        file_put_contents(self::$hashPath, $hash);
+        @file_put_contents(self::$hashPath, $hash);
     }
 
     /**
-     * Generate /sitemap.xml in site root.
+     * Generate /sitemap.xml.
      *
      * @param string $root
-     * @param array<int,array{title:string,href:string,updated:string}> $links
-     * @return void
+     * @param array<int,array{title:string,href:string,updated:string,priority:float,changefreq:string}> $links
+     * @return bool
      */
-    protected static function writeSitemap(string $root, array $links): void
+    protected static function writeSitemap(string $root, array $links): bool
     {
-        $xml  = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-        $xml .= "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
+        try {
+            $xml  = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+            $xml .= "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
 
-        foreach ($links as $l) {
-            $loc     = self::xmlSafe($l['href']);
-            $lastmod = $l['updated'];
+            foreach ($links as $l) {
+                $loc        = self::xmlSafe($l['href']);
+                $lastmod    = $l['updated'];
+                $priority   = number_format($l['priority'], 1);
+                $changefreq = $l['changefreq'];
 
-            $xml .= "  <url>\n";
-            $xml .= "    <loc>{$loc}</loc>\n";
-            $xml .= "    <lastmod>{$lastmod}</lastmod>\n";
-            $xml .= "    <changefreq>weekly</changefreq>\n";
-            $xml .= "    <priority>0.5</priority>\n";
-            $xml .= "  </url>\n";
+                $xml .= "  <url>\n";
+                $xml .= "    <loc>{$loc}</loc>\n";
+                $xml .= "    <lastmod>{$lastmod}</lastmod>\n";
+                $xml .= "    <changefreq>{$changefreq}</changefreq>\n";
+                $xml .= "    <priority>{$priority}</priority>\n";
+                $xml .= "  </url>\n";
+            }
+
+            $xml .= "</urlset>";
+
+            // Validate XML
+            if (!self::validateXml($xml)) {
+                self::log('Sitemap XML validation failed');
+                return false;
+            }
+
+            $result = @file_put_contents($root . '/sitemap.xml', $xml);
+            
+            if ($result === false) {
+                self::log('Failed to write sitemap.xml');
+                return false;
+            }
+
+            return true;
+
+        } catch (\Throwable $e) {
+            self::log('Sitemap generation failed: ' . $e->getMessage());
+            return false;
         }
-
-        $xml .= "</urlset>";
-
-        file_put_contents($root . '/sitemap.xml', $xml);
     }
 
     /**
-     * Generate /ror.xml in site root.
+     * Generate /ror.xml.
      *
      * @param string $root
-     * @param array<int,array{title:string,href:string,updated:string}> $links
-     * @return void
+     * @param array<int,array{title:string,href:string,updated:string,priority:float,changefreq:string}> $links
+     * @return bool
      */
-    protected static function writeRor(string $root, array $links): void
+    protected static function writeRor(string $root, array $links): bool
     {
-        $xml  = "<rss xmlns:ror=\"http://rorweb.com/0.1/\" version=\"2.0\">\n";
-        $xml .= "<channel>\n";
-        $xml .= "  <title>SiteMap</title>\n";
-        $xml .= "  <item>\n";
-        $xml .= "    <title>Index</title>\n";
-        $xml .= "    <ror:about>sitemap</ror:about>\n";
-        $xml .= "    <ror:type>SiteMap</ror:type>\n";
-        $xml .= "  </item>\n";
-
-        foreach ($links as $l) {
-            $title = self::xmlSafe($l['title']);
-            $loc   = self::xmlSafe($l['href']);
-
+        try {
+            $xml  = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+            $xml .= "<rss xmlns:ror=\"http://rorweb.com/0.1/\" version=\"2.0\">\n";
+            $xml .= "<channel>\n";
+            $xml .= "  <title>SiteMap</title>\n";
             $xml .= "  <item>\n";
-            $xml .= "    <title>{$title}</title>\n";
-            $xml .= "    <link>{$loc}</link>\n";
-            $xml .= "    <ror:updated>{$l['updated']}</ror:updated>\n";
-            $xml .= "    <ror:updatePeriod>weekly</ror:updatePeriod>\n";
-            $xml .= "    <ror:resourceOf>sitemap</ror:resourceOf>\n";
+            $xml .= "    <title>Index</title>\n";
+            $xml .= "    <ror:about>sitemap</ror:about>\n";
+            $xml .= "    <ror:type>SiteMap</ror:type>\n";
             $xml .= "  </item>\n";
+
+            foreach ($links as $l) {
+                $title = self::xmlSafe($l['title']);
+                $loc   = self::xmlSafe($l['href']);
+
+                $xml .= "  <item>\n";
+                $xml .= "    <title>{$title}</title>\n";
+                $xml .= "    <link>{$loc}</link>\n";
+                $xml .= "    <ror:updated>{$l['updated']}</ror:updated>\n";
+                $xml .= "    <ror:updatePeriod>{$l['changefreq']}</ror:updatePeriod>\n";
+                $xml .= "    <ror:resourceOf>sitemap</ror:resourceOf>\n";
+                $xml .= "  </item>\n";
+            }
+
+            $xml .= "</channel>\n</rss>";
+
+            // Validate XML
+            if (!self::validateXml($xml)) {
+                self::log('ROR XML validation failed');
+                return false;
+            }
+
+            $result = @file_put_contents($root . '/ror.xml', $xml);
+            
+            if ($result === false) {
+                self::log('Failed to write ror.xml');
+                return false;
+            }
+
+            return true;
+
+        } catch (\Throwable $e) {
+            self::log('ROR generation failed: ' . $e->getMessage());
+            return false;
         }
-
-        $xml .= "</channel>\n</rss>";
-
-        file_put_contents($root . '/ror.xml', $xml);
     }
 
     /**
-     * Minimal XML-safe escape:
-     *  - Escape & and <
-     *  - DO NOT escape ">" so ">Docs" stays ">Docs"
+     * Generate /robots.txt.
+     *
+     * @param string $root
+     * @return bool
+     */
+    protected static function writeRobots(string $root): bool
+    {
+        try {
+            $baseUrl = self::$baseUrl;
+
+            $robots  = "# Chaos CMS - Robots.txt\n";
+            $robots .= "# Generated: " . gmdate('Y-m-d H:i:s') . " UTC\n\n";
+            $robots .= "User-agent: *\n";
+            $robots .= "Allow: /\n";
+            $robots .= "Disallow: /app/\n";
+            $robots .= "Disallow: /install/\n";
+            $robots .= "Disallow: /admin/\n";
+            $robots .= "Disallow: /login\n";
+            $robots .= "Disallow: /logout\n";
+            $robots .= "Disallow: /signup\n\n";
+            $robots .= "Sitemap: {$baseUrl}/sitemap.xml\n";
+
+            $result = @file_put_contents($root . '/robots.txt', $robots);
+            
+            if ($result === false) {
+                self::log('Failed to write robots.txt');
+                return false;
+            }
+
+            return true;
+
+        } catch (\Throwable $e) {
+            self::log('Robots.txt generation failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Validate XML string.
+     *
+     * @param string $xml
+     * @return bool
+     */
+    protected static function validateXml(string $xml): bool
+    {
+        $prev = libxml_use_internal_errors(true);
+        
+        $doc = simplexml_load_string($xml);
+        
+        $errors = libxml_get_errors();
+        libxml_clear_errors();
+        libxml_use_internal_errors($prev);
+
+        if ($doc === false || !empty($errors)) {
+            foreach ($errors as $error) {
+                self::log('XML validation error: ' . trim($error->message));
+            }
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * XML-safe escape.
      *
      * @param string $text
      * @return string
      */
     protected static function xmlSafe(string $text): string
     {
-        return str_replace(
-            ['&', '<'],
-            ['&amp;', '&lt;'],
-            $text
-        );
+        return htmlspecialchars($text, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+    }
+
+    /**
+     * Log message.
+     *
+     * @param string $msg
+     * @return void
+     */
+    protected static function log(string $msg): void
+    {
+        $line = '[' . gmdate('Y-m-d H:i:s') . 'Z] [SEO] ' . $msg . PHP_EOL;
+        error_log($line);
     }
 }
 
 /**
  * Callable SEO entrypoints (KISS).
- * Some bootstrap code expects one of these.
  */
 
 /**
- * @param string $theme
+ * Build SEO files.
+ *
+ * @param string|null $theme
  * @return void
  */
 function seo_build(?string $theme = null): void
 {
-    // If theme not provided, try to fetch it from settings (DB), else fallback.
     if ($theme === null || $theme === '') {
         $theme = 'default';
 
-        /** @var mixed $db */
         global $db;
 
         if (isset($db) && $db instanceof db) {
             $row = $db->fetch("SELECT value FROM settings WHERE name='site_theme' LIMIT 1");
-            if (is_array($row) && isset($row['value']) && (string)$row['value'] !== '') {
+            if (is_array($row) && isset($row['value']) && (string) $row['value'] !== '') {
                 $theme = (string) $row['value'];
             }
         }
     }
 
-    // Run the SEO builder (class-based)
     if (class_exists('seo')) {
         seo::run((string) $theme);
         return;
     }
 
-    // If class missing, fail loudly but safely.
     http_response_code(500);
     echo '<div class="container my-4"><div class="alert alert-danger">SEO core missing: class seo not found.</div></div>';
 }
 
 /**
- * @param string $theme
+ * Generate SEO files.
+ *
+ * @param string|null $theme
  * @return void
  */
 function seo_generate(?string $theme = null): void
@@ -338,6 +578,6 @@ function seo_generate(?string $theme = null): void
     if ($theme === null || $theme === '') {
         return;
     }
+    
     seo::run($theme);
 }
-
