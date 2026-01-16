@@ -11,6 +11,7 @@ declare(strict_types=1);
  * Shows published media from media_gallery/media_files in a grid.
  * - Public items (visibility=0) are visible to everyone
  * - Member items (visibility=2) are visible only when logged in
+ * - Premium items require payment or subscription tier
  * - Editors/Admins/Creators can preview unpublished (status=0) on the public surface
  * - Click any tile to open a simple lightbox (no deps) for images/videos
  */
@@ -32,27 +33,29 @@ declare(strict_types=1);
     }
 
     $loggedIn = false;
+    $userId = null;
     if (isset($auth) && $auth instanceof auth) {
         $loggedIn = $auth->check();
+        if ($loggedIn && method_exists($auth, 'id')) {
+            try {
+                $userId = $auth->id();
+            } catch (Throwable $e) {
+                $userId = null;
+            }
+        }
     }
 
     // Determine role for privileged preview of unpublished items (editors/creators/admins)
     $roleId = 0;
-    if ($loggedIn && isset($auth) && $auth instanceof auth && method_exists($auth, 'id')) {
-        try {
-            $uid = $auth->id();
-            if (is_int($uid) && $uid > 0) {
-                $urow = $db->fetch('SELECT role_id FROM users WHERE id=' . (int) $uid . ' LIMIT 1');
-                if (is_array($urow) && isset($urow['role_id'])) {
-                    $roleId = (int) $urow['role_id'];
-                }
-            }
-        } catch (Throwable $e) {
-            $roleId = 0;
+    if ($loggedIn && $userId !== null) {
+        $urow = $db->fetch('SELECT role_id FROM users WHERE id=' . (int)$userId . ' LIMIT 1');
+        if (is_array($urow) && isset($urow['role_id'])) {
+            $roleId = (int)$urow['role_id'];
         }
     }
 
     $canPreviewUnpublished = ($roleId === 2 || $roleId === 4 || $roleId === 5);
+    $isAdmin = ($roleId === 4);
 
     $docroot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/\\');
 
@@ -80,7 +83,10 @@ declare(strict_types=1);
             g.caption,
             g.visibility,
             g.status,
-            g.sort_order
+            g.sort_order,
+            g.is_premium,
+            g.price,
+            g.tier_required
         FROM media_gallery g
         INNER JOIN media_files f ON f.id = g.file_id
         WHERE {$statusSql}
@@ -99,6 +105,85 @@ declare(strict_types=1);
         }
         $res->close();
     }
+
+    /**
+     * Check if user has purchased this specific media item
+     */
+    $hasPurchased = static function (int $mediaId, ?int $userId) use ($conn): bool {
+        if ($userId === null) {
+            return false;
+        }
+        
+        $stmt = $conn->prepare("
+            SELECT id FROM content_purchases 
+            WHERE user_id=? AND content_type='media' AND content_id=? AND status='completed'
+            LIMIT 1
+        ");
+        if ($stmt === false) {
+            return false;
+        }
+        
+        $stmt->bind_param('ii', $userId, $mediaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $exists = ($result && $result->num_rows > 0);
+        $stmt->close();
+        
+        return $exists;
+    };
+
+    /**
+     * Get user's current subscription tier
+     */
+    $getUserTier = static function (?int $userId) use ($conn): string {
+        if ($userId === null) {
+            return 'free';
+        }
+        
+        $stmt = $conn->prepare("
+            SELECT st.slug 
+            FROM user_subscriptions us
+            INNER JOIN subscription_tiers st ON st.id = us.tier_id
+            WHERE us.user_id=? AND us.status='active' 
+            AND (us.expires_at IS NULL OR us.expires_at > NOW())
+            ORDER BY 
+                CASE st.slug 
+                    WHEN 'pro' THEN 3 
+                    WHEN 'premium' THEN 2 
+                    ELSE 1 
+                END DESC
+            LIMIT 1
+        ");
+        
+        if ($stmt === false) {
+            return 'free';
+        }
+        
+        $stmt->bind_param('i', $userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result && $row = $result->fetch_assoc()) {
+            $tier = (string)($row['slug'] ?? 'free');
+            $stmt->close();
+            return $tier;
+        }
+        
+        $stmt->close();
+        return 'free';
+    };
+
+    /**
+     * Check if user's tier meets requirement
+     */
+    $tierMeetsRequirement = static function (string $userTier, string $requiredTier): bool {
+        $levels = ['free' => 0, 'premium' => 1, 'pro' => 2];
+        $userLevel = $levels[$userTier] ?? 0;
+        $requiredLevel = $levels[$requiredTier] ?? 0;
+        return $userLevel >= $requiredLevel;
+    };
+
+    $userTier = $getUserTier($userId);
 
     $isImageMime = static function (string $mime): bool {
         return (strpos($mime, 'image/') === 0);
@@ -131,13 +216,17 @@ declare(strict_types=1);
         <div class="media-grid mt-3">
             <?php foreach ($items as $it): ?>
                 <?php
-                $rel      = (string) ($it['rel_path'] ?? '');
-                $mime     = (string) ($it['mime'] ?? '');
-                $title    = trim((string) ($it['title'] ?? ''));
-                $caption  = trim((string) ($it['caption'] ?? ''));
-                $filename = (string) ($it['filename'] ?? '');
-                $vis      = (int) ($it['visibility'] ?? 0);
-                $st       = (int) ($it['status'] ?? 1);
+                $mediaId  = (int)($it['id'] ?? 0);
+                $rel      = (string)($it['rel_path'] ?? '');
+                $mime     = (string)($it['mime'] ?? '');
+                $title    = trim((string)($it['title'] ?? ''));
+                $caption  = trim((string)($it['caption'] ?? ''));
+                $filename = (string)($it['filename'] ?? '');
+                $vis      = (int)($it['visibility'] ?? 0);
+                $st       = (int)($it['status'] ?? 1);
+                $isPremium = (int)($it['is_premium'] ?? 0);
+                $price     = $it['price'] ?? null;
+                $tierReq   = (string)($it['tier_required'] ?? 'free');
 
                 $url = $rel !== '' ? $rel : '';
                 if ($url !== '' && $url[0] !== '/') {
@@ -148,75 +237,133 @@ declare(strict_types=1);
                 $isVid = $isVideoMime($mime) && $url !== '' && is_file($docroot . $url);
 
                 $label = $title !== '' ? $title : ($filename !== '' ? $filename : 'Media');
-                $meta  = ($vis === 2) ? 'Members' : 'Public';
+                
+                // Determine access status
+                $hasAccess = false;
+                $accessReason = '';
+                
+                // Admins always have access
+                if ($isAdmin) {
+                    $hasAccess = true;
+                }
+                // Check premium status
+                elseif ($isPremium === 1) {
+                    if ($hasPurchased($mediaId, $userId)) {
+                        $hasAccess = true;
+                    } elseif ($tierMeetsRequirement($userTier, $tierReq)) {
+                        $hasAccess = true;
+                    }
+                }
+                // Check tier requirement even if not premium
+                elseif ($tierReq !== 'free') {
+                    if ($tierMeetsRequirement($userTier, $tierReq)) {
+                        $hasAccess = true;
+                    }
+                }
+                // Free content
+                else {
+                    $hasAccess = true;
+                }
+                
+                // Build meta label
+                if ($isPremium === 1 && $price !== null) {
+                    $meta = 'Premium - $' . number_format((float)$price, 2);
+                } elseif ($tierReq !== 'free') {
+                    $meta = ucfirst($tierReq);
+                } else {
+                    $meta = ($vis === 2) ? 'Members' : 'Public';
+                }
+                
                 if ($st === 0) {
                     $meta = 'Unpublished · ' . $meta;
                 }
                 ?>
 
                 <?php if ($isImg): ?>
-                    <a
-                        class="media-tile"
-                        data-media-kind="image"
-                        href="<?= $h($url); ?>"
-                        data-media-full="<?= $h($url); ?>"
-                        data-media-alt="<?= $h($label); ?>"
-                        data-media-title="<?= $h($title); ?>"
-                        data-media-caption="<?= $h($caption); ?>"
-                    >
-                        <img src="<?= $h($url); ?>" alt="<?= $h($label); ?>">
+                    <?php if ($hasAccess): ?>
+                        <a
+                            class="media-tile"
+                            data-media-kind="image"
+                            href="<?= $h($url); ?>"
+                            data-media-full="<?= $h($url); ?>"
+                            data-media-alt="<?= $h($label); ?>"
+                            data-media-title="<?= $h($title); ?>"
+                            data-media-caption="<?= $h($caption); ?>"
+                        >
+                            <img src="<?= $h($url); ?>" alt="<?= $h($label); ?>">
 
-                        <?php if ($st === 0): ?>
-                            <div class="media-badge">Unpublished</div>
-                        <?php endif; ?>
+                            <?php if ($st === 0): ?>
+                                <div class="media-badge">Unpublished</div>
+                            <?php endif; ?>
 
-                        <?php if ($title !== '' || $caption !== ''): ?>
-                            <div class="media-overlay">
-                                <?php if ($title !== ''): ?>
-                                    <div class="media-overlay-title"><?= $h($title); ?></div>
-                                <?php endif; ?>
-                                <?php if ($caption !== ''): ?>
-                                    <div class="media-overlay-cap"><?= $h($caption); ?></div>
-                                <?php endif; ?>
-                            </div>
-                        <?php endif; ?>
+                            <?php if ($title !== '' || $caption !== ''): ?>
+                                <div class="media-overlay">
+                                    <?php if ($title !== ''): ?>
+                                        <div class="media-overlay-title"><?= $h($title); ?></div>
+                                    <?php endif; ?>
+                                    <?php if ($caption !== ''): ?>
+                                        <div class="media-overlay-cap"><?= $h($caption); ?></div>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
 
-                        <div class="media-pill"><?= $h($meta); ?></div>
-                    </a>
-                <?php elseif ($isVid): ?>
-                    <a
-                        class="media-tile media-video-tile"
-                        href="<?= $h($url); ?>"
-                        data-media-kind="video"
-                        data-media-full="<?= $h($url); ?>"
-                        data-media-alt="<?= $h($label); ?>"
-                        data-media-title="<?= $h($title); ?>"
-                        data-media-caption="<?= $h($caption); ?>"
-                    >
-                        <div class="media-video-thumb">
-                            <div class="media-video-play">▶</div>
-                            <div class="media-video-name"><?= $h($label); ?></div>
+                            <div class="media-pill"><?= $h($meta); ?></div>
+                        </a>
+                    <?php else: ?>
+                        <div class="media-tile media-locked">
+                            <div class="media-locked-overlay">🔒</div>
+                            <img src="<?= $h($url); ?>" alt="<?= $h($label); ?>">
+                            <div class="media-pill media-pill-locked"><?= $h($meta); ?></div>
                         </div>
-
-                        <?php if ($st === 0): ?>
-                            <div class="media-badge">Unpublished</div>
-                        <?php endif; ?>
-
-                        <?php if ($title !== '' || $caption !== ''): ?>
-                            <div class="media-overlay">
-                                <?php if ($title !== ''): ?>
-                                    <div class="media-overlay-title"><?= $h($title); ?></div>
-                                <?php endif; ?>
-                                <?php if ($caption !== ''): ?>
-                                    <div class="media-overlay-cap"><?= $h($caption); ?></div>
-                                <?php endif; ?>
+                    <?php endif; ?>
+                    
+                <?php elseif ($isVid): ?>
+                    <?php if ($hasAccess): ?>
+                        <a
+                            class="media-tile media-video-tile"
+                            href="<?= $h($url); ?>"
+                            data-media-kind="video"
+                            data-media-full="<?= $h($url); ?>"
+                            data-media-alt="<?= $h($label); ?>"
+                            data-media-title="<?= $h($title); ?>"
+                            data-media-caption="<?= $h($caption); ?>"
+                        >
+                            <div class="media-video-thumb">
+                                <div class="media-video-play">▶</div>
+                                <div class="media-video-name"><?= $h($label); ?></div>
                             </div>
-                        <?php endif; ?>
 
-                        <div class="media-pill"><?= $h($meta); ?></div>
-                    </a>
+                            <?php if ($st === 0): ?>
+                                <div class="media-badge">Unpublished</div>
+                            <?php endif; ?>
+
+                            <?php if ($title !== '' || $caption !== ''): ?>
+                                <div class="media-overlay">
+                                    <?php if ($title !== ''): ?>
+                                        <div class="media-overlay-title"><?= $h($title); ?></div>
+                                    <?php endif; ?>
+                                    <?php if ($caption !== ''): ?>
+                                        <div class="media-overlay-cap"><?= $h($caption); ?></div>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
+
+                            <div class="media-pill"><?= $h($meta); ?></div>
+                        </a>
+                    <?php else: ?>
+                        <div class="media-tile media-video-tile media-locked">
+                            <div class="media-locked-overlay">🔒</div>
+                            <div class="media-video-thumb">
+                                <div class="media-video-play">▶</div>
+                                <div class="media-video-name"><?= $h($label); ?></div>
+                            </div>
+                            <div class="media-pill media-pill-locked"><?= $h($meta); ?></div>
+                        </div>
+                    <?php endif; ?>
+                    
                 <?php else: ?>
-                    <a class="media-tile media-file-tile" href="<?= $h($url); ?>" target="_blank" rel="noopener">
+                    <a class="media-tile media-file-tile" href="<?= $hasAccess ? $h($url) : '#'; ?>" 
+                       <?= $hasAccess ? 'target="_blank" rel="noopener"' : ''; ?>>
                         <div class="media-file">
                             <div class="fw-semibold"><?= $h($label); ?></div>
                             <div class="small text-muted mt-1"><?= $h($mime); ?></div>
@@ -283,6 +430,24 @@ declare(strict_types=1);
             object-fit: cover;
         }
 
+        .media-locked {
+            cursor: not-allowed;
+        }
+
+        .media-locked img {
+            filter: blur(8px);
+            opacity: 0.4;
+        }
+
+        .media-locked-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            z-index: 10;
+        }
+
         .media-file-tile .media-file {
             height: 160px;
             padding: 12px;
@@ -320,140 +485,126 @@ declare(strict_types=1);
             position: absolute;
             right: 10px;
             top: 10px;
-            background: rgba(0,0,0,0.7);
+            background: rgba(0,0,0,0.70);
             color: #fff;
-            font-size: 12px;
             padding: 4px 8px;
-            border-radius: 999px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .media-pill-locked {
+            background: rgba(220, 38, 38, 0.9);
+        }
+
+        .media-badge {
+            position: absolute;
+            left: 10px;
+            top: 10px;
+            background: rgba(245,158,11,0.90);
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .media-video-tile .media-video-thumb {
+            position: relative;
+            height: 160px;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .media-video-tile .media-video-play {
+            position: absolute;
+            font-size: 42px;
+            color: rgba(255,255,255,0.85);
+        }
+
+        .media-video-tile .media-video-name {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
         }
 
         .media-modal {
             position: fixed;
             inset: 0;
-            display: none;
             z-index: 9999;
+            display: none;
         }
 
         .media-modal[aria-hidden="false"] {
-            display: block;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .media-modal-backdrop {
             position: absolute;
             inset: 0;
-            background: rgba(0,0,0,0.85);
+            background: rgba(0,0,0,0.92);
         }
 
         .media-modal-card {
             position: relative;
-            max-width: 92vw;
-            max-height: 92vh;
-            margin: 4vh auto;
-            background: #111;
-            border-radius: 14px;
-            overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.12);
+            z-index: 1;
+            max-width: 90vw;
+            max-height: 90vh;
         }
 
         .media-modal-close {
             position: absolute;
-            top: 8px;
-            right: 10px;
-            width: 36px;
-            height: 36px;
-            border: 0;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.12);
+            top: -40px;
+            right: 0;
+            background: none;
+            border: none;
             color: #fff;
-            font-size: 20px;
+            font-size: 32px;
             cursor: pointer;
-            z-index: 2;
-        }
-
-        .media-modal-body {
-            padding: 16px;
+            padding: 0;
+            width: 40px;
+            height: 40px;
         }
 
         .media-modal-body img {
-            max-width: 92vw;
-            max-height: 78vh;
-            width: auto;
-            height: auto;
-            object-fit: contain;
-            border-radius: 10px;
+            max-width: 90vw;
+            max-height: 90vh;
             display: block;
-            background: #000;
+            border-radius: 8px;
+        }
+
+        .media-modal-body video {
+            max-width: 90vw;
+            max-height: 90vh;
+            display: block;
+            border-radius: 8px;
         }
 
         .media-modal-meta {
-            margin-top: 10px;
+            background: rgba(0,0,0,0.80);
             color: #fff;
+            padding: 12px;
+            margin-top: 10px;
+            border-radius: 8px;
         }
 
         .media-modal-title {
-            font-weight: 800;
+            font-weight: 700;
+            font-size: 16px;
             margin-bottom: 4px;
         }
 
         .media-modal-cap {
-            opacity: 0.85;
-            line-height: 1.35;
-        }
-
-        .media-badge{
-            position:absolute;
-            top:10px;
-            left:10px;
-            background:rgba(0,0,0,0.75);
-            color:#fff;
-            font-size:12px;
-            padding:4px 8px;
-            border-radius:999px;
-            letter-spacing:0.2px;
-            z-index:3;
-        }
-
-        .media-video-thumb{
-            height:160px;
-            display:flex;
-            flex-direction:column;
-            align-items:center;
-            justify-content:center;
-            gap:10px;
-            background:rgba(0,0,0,0.04);
-            padding:12px;
-            text-align:center;
-        }
-
-        .media-video-play{
-            width:44px;
-            height:44px;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            border-radius:999px;
-            border:1px solid rgba(0,0,0,0.25);
-            font-size:18px;
-            line-height:1;
-            opacity:0.85;
-        }
-
-        .media-video-name{
-            font-size:13px;
-            opacity:0.9;
-            max-width:100%;
-            word-break:break-word;
-        }
-
-        .media-modal-body video{
-            max-width:92vw;
-            max-height:78vh;
-            width:auto;
-            height:auto;
-            object-fit:contain;
-            border-radius:10px;
-            background:#000;
-            display:block;
+            font-size: 14px;
+            opacity: 0.9;
         }
     </style>
 
@@ -466,26 +617,23 @@ declare(strict_types=1);
             var title = document.getElementById('mediaModalTitle');
             var cap = document.getElementById('mediaModalCap');
 
-            function openModal(kind, full, alt, t, c) {
-                if (!kind) { kind = 'image'; }
-
+            function openModal(kind, src, alt, t, c) {
                 if (kind === 'video') {
-                    if (vid) {
-                        vid.src = full || '';
-                        vid.style.display = '';
-                    }
-                    img.src = '';
                     img.style.display = 'none';
+                    vid.style.display = '';
+                    vid.src = src;
+                    vid.load();
+                    try { vid.play(); } catch (e) {}
                 } else {
-                    img.src = full || '';
-                    img.alt = alt || '';
-                    img.style.display = '';
+                    vid.style.display = 'none';
                     if (vid) {
-                        vid.pause();
-                        vid.removeAttribute('src');
-                        vid.load();
-                        vid.style.display = 'none';
+                        try {
+                            vid.pause();
+                        } catch (e) {}
                     }
+                    img.style.display = '';
+                    img.src = src;
+                    img.alt = alt || '';
                 }
 
                 title.textContent = t || '';
@@ -546,5 +694,3 @@ declare(strict_types=1);
     </script>
     <?php
 })();
-
-

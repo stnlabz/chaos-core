@@ -43,6 +43,15 @@ if (is_file($lock) || is_file($flag)) {
     }
 }
 
+//------------------------------------------------------------
+// Stripe webhook
+//------------------------------------------------------------
+// Stripe webhook (add before module routing)
+if ($first === 'webhooks' && isset($parts[1]) && $parts[1] === 'stripe') {
+    require $docroot . '/app/webhooks/stripe.php';
+    return;
+}
+
 // ------------------------------------------------------------
 // Account Routes (EXPLICIT - Security Critical)
 // ------------------------------------------------------------
