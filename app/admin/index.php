@@ -171,6 +171,9 @@ switch ($action) {
     case 'audit':
         admin_view('audit');
         break;
+    case 'finance':
+        admin_view('finance');
+        break;
 
     default:
         http_response_code(404);

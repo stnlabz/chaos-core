@@ -391,7 +391,16 @@ declare(strict_types=1);
                             <?php endif; ?>
                         </div>
                         <?php if ($isLoggedIn): ?>
-                            <a href="/account?upgrade=1" class="post-locked-btn">Upgrade Now</a>
+                            <button 
+                                type="button"
+                                class="post-locked-btn" 
+                                data-purchase-post-id="<?= $postId; ?>" 
+                                data-purchase-price="<?= $price !== null ? number_format((float)$price, 2) : '0.00'; ?>" 
+                                data-purchase-tier="<?= $e(ucfirst($tierReq)); ?>" 
+                                data-purchase-title="<?= $e($title); ?>"
+                            >
+                                View Purchase Options
+                            </button>
                         <?php else: ?>
                             <a href="/login" class="post-locked-btn">Login to View</a>
                         <?php endif; ?>
@@ -583,6 +592,26 @@ declare(strict_types=1);
         </div>
     </div>
 
+    <!-- Purchase Modal -->
+    <div class="purchase-modal" id="purchaseModal" aria-hidden="true" style="position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;">
+        <div class="purchase-modal-backdrop" data-purchase-close="1" style="position:absolute;inset:0;background:rgba(0,0,0,0.8);"></div>
+        <div class="purchase-modal-card" role="dialog" aria-modal="true" style="position:relative;z-index:1;background:#1f2937;border-radius:16px;max-width:480px;width:90%;padding:0;box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
+            <button class="purchase-modal-close" type="button" data-purchase-close="1" aria-label="Close" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#fff;font-size:28px;cursor:pointer;padding:4px;width:32px;height:32px;opacity:0.7;">×</button>
+            
+            <div class="purchase-modal-body" style="padding:32px 24px;text-align:center;">
+                <div class="purchase-modal-icon" style="font-size:4rem;margin-bottom:16px;">🔒</div>
+                <h2 class="purchase-modal-title" id="purchaseTitle" style="font-size:1.5rem;font-weight:700;margin:0 0 12px;color:#fff;">Premium Content</h2>
+                <p class="purchase-modal-desc" id="purchaseDesc" style="color:rgba(255,255,255,0.8);margin:0 0 24px;">Choose how you'd like to access this content:</p>
+                
+                <div class="purchase-options" id="purchaseOptions" style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px;"></div>
+                
+                <div class="purchase-modal-footer" style="display:flex;justify-content:center;gap:12px;">
+                    <button type="button" class="btn-purchase-cancel" data-purchase-close="1" style="padding:10px 24px;background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:8px;cursor:pointer;font-weight:600;">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <style>
         .posts-list { display: grid; grid-template-columns: 1fr; gap: 14px; }
         .post-row {
@@ -606,6 +635,122 @@ declare(strict_types=1);
             font-weight: 600;
             font-size: .8rem;
         }
+
+        .purchase-modal[aria-hidden="false"] { display: flex !important; }
+        .purchase-option {
+            background: rgba(168, 85, 247, 0.1);
+            border: 2px solid rgba(168, 85, 247, 0.3);
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+        }
+        .purchase-option:hover {
+            background: rgba(168, 85, 247, 0.2);
+            border-color: rgba(168, 85, 247, 0.5);
+        }
+        .purchase-option-title {
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin-bottom: 4px;
+            color: #a855f7;
+        }
+        .purchase-option-desc {
+            font-size: 0.9rem;
+            color: rgba(255,255,255,0.7);
+            margin-bottom: 8px;
+        }
+        .purchase-option-price {
+            font-weight: 600;
+            color: #fff;
+            font-size: 1.2rem;
+        }
+        .post-locked-btn {
+            display: inline-block;
+            padding: 10px 24px;
+            background: #a855f7;
+            color: #fff;
+            text-decoration: none;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .post-locked-btn:hover {
+            background: #9333ea;
+            color: #fff;
+        }
     </style>
+
+    <script>
+    (function() {
+        var purchaseModal = document.getElementById('purchaseModal');
+        var purchaseTitle = document.getElementById('purchaseTitle');
+        var purchaseOptions = document.getElementById('purchaseOptions');
+
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('[data-purchase-post-id]');
+            if (btn) {
+                e.preventDefault();
+                var id = btn.getAttribute('data-purchase-post-id');
+                var price = btn.getAttribute('data-purchase-price');
+                var tier = btn.getAttribute('data-purchase-tier');
+                var title = btn.getAttribute('data-purchase-title');
+                
+                purchaseTitle.textContent = title;
+                
+                var html = '';
+                if (price && parseFloat(price) > 0) {
+                    html += '<div class="purchase-option" data-purchase-action="one-time" data-id="' + id + '" data-price="' + price + '">';
+                    html += '<div class="purchase-option-title">One-Time Purchase</div>';
+                    html += '<div class="purchase-option-desc">Buy this post once and keep it forever</div>';
+                    html += '<div class="purchase-option-price">$' + price + '</div>';
+                    html += '</div>';
+                }
+                
+                if (tier && tier !== 'Free') {
+                    html += '<div class="purchase-option" data-purchase-action="subscribe" data-tier="' + tier.toLowerCase() + '">';
+                    html += '<div class="purchase-option-title">' + tier + ' Subscription</div>';
+                    html += '<div class="purchase-option-desc">Access this and all ' + tier + ' content</div>';
+                    html += '<div class="purchase-option-price">Subscribe Now</div>';
+                    html += '</div>';
+                }
+                
+                purchaseOptions.innerHTML = html;
+                purchaseModal.setAttribute('aria-hidden', 'false');
+            }
+
+            var closeBtn = e.target.closest('[data-purchase-close]');
+            if (closeBtn) {
+                e.preventDefault();
+                purchaseModal.setAttribute('aria-hidden', 'true');
+            }
+
+            var option = e.target.closest('[data-purchase-action]');
+            if (option) {
+                e.preventDefault();
+                var action = option.getAttribute('data-purchase-action');
+                
+                if (action === 'subscribe') {
+                    var tier = option.getAttribute('data-tier');
+                    window.location.href = '/account?upgrade=' + tier;
+                } else if (action === 'one-time') {
+                    var id = option.getAttribute('data-id');
+                    var price = option.getAttribute('data-price');
+                    window.location.href = '/checkout?type=post&id=' + id + '&price=' + price;
+                }
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && purchaseModal.getAttribute('aria-hidden') === 'false') {
+                purchaseModal.setAttribute('aria-hidden', 'true');
+            }
+        });
+    })();
+    </script>
     <?php
 })();
