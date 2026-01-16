@@ -9,6 +9,8 @@ Project is stable.
 
 ## Main is Development
  - Do not consider anything here on this page as **Latest**, 2.0.8 is in the **Releases**
+   **Things to note**
+   - The **ChAoS CMS** does not rely on **Composer**
 ---
 
 ## Summary
