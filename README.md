@@ -1,4 +1,4 @@
-# Chaos CMS Core
+# ChAoS CMS Core
 
 ## Version
 v2.0.8
