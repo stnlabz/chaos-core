@@ -245,7 +245,7 @@ declare(strict_types=1);
                                         </td>
                                         <td><?= $h((string)$r['ref_type']); ?></td>
                                         <td><?= (int)$r['ref_id']; ?></td>
-                                        <td><?= (int)$r['amount_cents']; ?> <?= $h((string)$r['currency']); ?></td>
+                                        <td>$<?= number_format((int)$r['amount_cents'] / 100, 2); ?> <?= strtoupper($h((string)$r['currency'])); ?></td>
                                         <td><?= $h((string)$r['kind']); ?></td>
                                         <td><strong><?= $h((string)$r['status']); ?></strong></td>
                                         <td class="small"><?= $h((string)$r['note']); ?></td>
@@ -262,4 +262,3 @@ declare(strict_types=1);
     </div>
     <?php
 })();
-

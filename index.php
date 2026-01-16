@@ -27,12 +27,25 @@ if ($first === 'admin') {
     return;
 }
 
-// The Themes Header
-include __DIR__ . "/public/themes/{$site_theme}/header.php";
+// Check if this is an API endpoint that should skip theme wrapper
+$skipTheme = false;
+if ($first === 'checkout' && strpos($path, '/checkout/create-session') !== false) {
+    $skipTheme = true;
+}
+if ($first === 'webhooks') {
+    $skipTheme = true;
+}
+
+// The Themes Header (skip for API endpoints)
+if (!$skipTheme) {
+    include __DIR__ . "/public/themes/{$site_theme}/header.php";
+}
 
 // The Router
 // All routing gets dispatched from here
 include __DIR__ . '/app/router.php';
 
-// The Themes Footer
-include __DIR__ . "/public/themes/{$site_theme}/footer.php";
+// The Themes Footer (skip for API endpoints)
+if (!$skipTheme) {
+    include __DIR__ . "/public/themes/{$site_theme}/footer.php";
+}

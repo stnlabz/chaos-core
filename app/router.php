@@ -18,7 +18,8 @@ declare(strict_types=1);
 // ------------------------------------------------------------
 $path     = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $trimmed  = trim($path, '/');
-[$first]  = $trimmed === '' ? ['home'] : explode('/', $trimmed, 2);
+$segments = $trimmed === '' ? ['home'] : explode('/', $trimmed);
+$first    = $segments[0] ?? 'home';
 $docroot  = rtrim($_SERVER['DOCUMENT_ROOT'] ?? __DIR__, '/\\');
 
 // ------------------------------------------------------------
@@ -44,13 +45,35 @@ if (is_file($lock) || is_file($flag)) {
 }
 
 //------------------------------------------------------------
-// Stripe webhook
+// Checkout & Webhooks (before account routes)
 //------------------------------------------------------------
-// Stripe webhook (add before module routing)
-if ($first === 'webhooks' && isset($parts[1]) && $parts[1] === 'stripe') {
-    require $docroot . '/app/webhooks/stripe.php';
-    return;
+// /checkout/create-session - API endpoint (no theme)
+if ($first === 'checkout' && isset($segments[1]) && $segments[1] === 'create-session') {
+    $api = $docroot . '/app/modules/checkout/api.php';
+    if (is_file($api)) {
+        require $api;
+        return;
+    }
 }
+
+// /checkout - Main module (with theme)
+if ($first === 'checkout') {
+    $checkout = $docroot . '/app/modules/checkout/main.php';
+    if (is_file($checkout)) {
+        require $checkout;
+        return;
+    }
+}
+
+// /webhooks/stripe
+if ($first === 'webhooks' && isset($segments[1]) && $segments[1] === 'stripe') {
+    $stripeWebhook = $docroot . '/app/webhooks/stripe.php';
+    if (is_file($stripeWebhook)) {
+        require $stripeWebhook;
+        return;
+    }
+}
+
 
 // ------------------------------------------------------------
 // Account Routes (EXPLICIT - Security Critical)

@@ -84,6 +84,128 @@ declare(strict_types=1);
     error_log("Stripe Webhook: {$eventType} - {$eventId}");
 
     /**
+     * Handle checkout.session.completed - This fires when payment succeeds
+     */
+    if ($eventType === 'checkout.session.completed') {
+        $sessionId = (string)($data['id'] ?? '');
+        $paymentIntentId = (string)($data['payment_intent'] ?? '');
+        $amountCents = (int)($data['amount_total'] ?? 0);
+        $currency = (string)($data['currency'] ?? 'usd');
+        $metadata = $data['metadata'] ?? [];
+        
+        // For checkout sessions, metadata is on the session itself
+        if (empty($metadata)) {
+            // Try to get from payment_intent_data if it exists
+            $metadata = $data['payment_intent_data']['metadata'] ?? [];
+        }
+        
+        error_log("Checkout Session Metadata: " . json_encode($metadata));
+        
+        $userId = (int)($metadata['user_id'] ?? 0);
+        $contentType = (string)($metadata['content_type'] ?? '');
+        $contentId = (int)($metadata['content_id'] ?? 0);
+        
+        error_log("Parsed: userId=$userId, contentType=$contentType, contentId=$contentId");
+        
+        if ($userId > 0 && $contentType !== '' && $contentId > 0) {
+            $amount = $amountCents / 100;
+            $platformFee = $amount * ($platformFeePercent / 100);
+            $creatorPayout = $amount - $platformFee;
+            
+            // Create content_purchases record
+            $stmt = $conn->prepare("
+                INSERT INTO content_purchases 
+                (user_id, content_type, content_id, amount, platform_fee, creator_payout, 
+                 stripe_payment_intent_id, status, purchased_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'completed', NOW(), NOW())
+                ON DUPLICATE KEY UPDATE
+                    status = 'completed',
+                    purchased_at = NOW()
+            ");
+            
+            if ($stmt !== false) {
+                $stmt->bind_param(
+                    'isiddds',
+                    $userId,
+                    $contentType,
+                    $contentId,
+                    $amount,
+                    $platformFee,
+                    $creatorPayout,
+                    $paymentIntentId
+                );
+                $stmt->execute();
+                $stmt->close();
+            }
+            
+            // Get creator info
+            $creatorId = 0;
+            $creatorUsername = '';
+            
+            if ($contentType === 'post') {
+                $row = $db->fetch("
+                    SELECT p.author_id, u.username 
+                    FROM posts p 
+                    LEFT JOIN users u ON u.id = p.author_id
+                    WHERE p.id = {$contentId} 
+                    LIMIT 1
+                ");
+                if (is_array($row)) {
+                    $creatorId = (int)($row['author_id'] ?? 0);
+                    $creatorUsername = (string)($row['username'] ?? '');
+                }
+            } elseif ($contentType === 'media') {
+                $row = $db->fetch("
+                    SELECT g.uploader_id, u.username 
+                    FROM media_gallery g 
+                    LEFT JOIN users u ON u.id = g.uploader_id
+                    WHERE g.id = {$contentId} 
+                    LIMIT 1
+                ");
+                if (is_array($row)) {
+                    $creatorId = (int)($row['uploader_id'] ?? 0);
+                    $creatorUsername = (string)($row['username'] ?? '');
+                }
+            }
+            
+            // Record in finance_ledger
+            if ($creatorId > 0) {
+                $stmt = $conn->prepare("
+                    INSERT INTO finance_ledger 
+                    (user_id, creator_id, creator_username, amount_cents, currency, 
+                     kind, status, ref_type, ref_id, note, created_at)
+                    VALUES (?, ?, ?, ?, ?, 'purchase', 'paid', ?, ?, ?, NOW())
+                ");
+                
+                if ($stmt !== false) {
+                    $note = "Content purchase via Stripe";
+                    $stmt->bind_param(
+                        'iisissis',
+                        $userId,
+                        $creatorId,
+                        $creatorUsername,
+                        $amountCents,
+                        $currency,
+                        $contentType,
+                        $contentId,
+                        $note
+                    );
+                    $stmt->execute();
+                    $stmt->close();
+                }
+            }
+            
+            error_log("Payment processed: User {$userId} purchased {$contentType} {$contentId}");
+        } else {
+            error_log("Webhook error: Missing metadata - userId=$userId, contentType=$contentType, contentId=$contentId");
+        }
+        
+        http_response_code(200);
+        echo json_encode(['received' => true, 'event' => $eventType]);
+        return;
+    }
+
+    /**
      * Handle payment_intent.succeeded - One-time content purchase
      */
     if ($eventType === 'payment_intent.succeeded') {
@@ -92,9 +214,14 @@ declare(strict_types=1);
         $currency = (string)($data['currency'] ?? 'usd');
         $metadata = $data['metadata'] ?? [];
         
+        // Log metadata for debugging
+        error_log("Payment Intent Metadata: " . json_encode($metadata));
+        
         $userId = (int)($metadata['user_id'] ?? 0);
         $contentType = (string)($metadata['content_type'] ?? ''); // 'post' or 'media'
         $contentId = (int)($metadata['content_id'] ?? 0);
+        
+        error_log("Parsed: userId=$userId, contentType=$contentType, contentId=$contentId");
         
         if ($userId > 0 && $contentType !== '' && $contentId > 0) {
             // Get content info to calculate platform fee
@@ -186,6 +313,8 @@ declare(strict_types=1);
             }
             
             error_log("Payment processed: User {$userId} purchased {$contentType} {$contentId}");
+        } else {
+            error_log("Webhook error: Missing metadata - userId=$userId, contentType=$contentType, contentId=$contentId");
         }
     }
 

@@ -74,7 +74,7 @@ declare(strict_types=1);
 
     $sql = "
         SELECT
-            f.id,
+            g.id,
             f.filename,
             f.rel_path,
             f.mime,
