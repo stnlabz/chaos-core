@@ -71,6 +71,7 @@ This marks the first **release-grade** core of Chaos CMS Core.
  - Video upload and playback
  - enhanced role awareness
  - built in Search Engine Optimization (SEO) xml generation.
+ - Stripe webhook to manage Media and Post premium and Pro content
 ---
 
 ## Known Constraints
