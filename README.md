@@ -1,23 +1,21 @@
 # Chaos CMS Core
 
 ## Version
-v2.0.7
+v2.0.8
 
 ## Status
 **Stable**  
 Project is stable.
 
 ## Main is Development
-
- - v2.0.8 is not released as of yet, please use <a href="/releases/tag/2.0.7">v2.0.7</a>
- - v2.0.8 regression has ended 2026-01-14
+ - Do not consider anything here on this page as **Latest**, 2.0.8 is in the **Releases**
 ---
 
 ## Summary
 This release finalizes the Chaos CMS core, installer, updater, and admin tooling.  
 Architecture, update flow, and runtime behavior are now documented, versioned, and aligned.
 
-This marks the first **release-grade** core of Chaos CMS Core.
+This marks the first **monitized** core of Chaos CMS Core.
 
 ---
 
@@ -28,6 +26,7 @@ This marks the first **release-grade** core of Chaos CMS Core.
 - Bootstrap hardened with filesystem-first theme fallback
 - Default theme always loads if DB configuration is missing or invalid
 - Core behavior fully documented
+- Core modules updated
 
 ### Installer
 - Schema-only database creation (no silent seeding)
@@ -52,6 +51,7 @@ This marks the first **release-grade** core of Chaos CMS Core.
 - Admin CSS stabilized and centralized
 
 ### Content
+- Posts and Media are now Monitized
 - Topics implemented as global taxonomy
 - Posts reference topics via `topic_id`
 - Topic selection already present in post editor
@@ -78,7 +78,6 @@ This marks the first **release-grade** core of Chaos CMS Core.
 - Core is frozen; only bug fixes will be accepted.
 - No automatic role or theme seeding.
 - Permissions beyond roles are not implemented in this release.
-
 ---
 
 ## Upgrade Notes
@@ -87,7 +86,6 @@ This marks the first **release-grade** core of Chaos CMS Core.
 - Ensure filesystem permissions allow:
   - `/app/update/*`
   - `/app/data/*`
-
 ---
 
 ## Philosophy
@@ -100,5 +98,5 @@ Chaos CMS favors:
 ---
 
 ## Final Note
-This release establishes the foundation.  
+This release is a continuance of the the core foundation.  
 Future versions will build **on top of this**, not rewrite it.
