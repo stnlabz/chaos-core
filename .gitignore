@@ -3,3 +3,4 @@
 *.tar.gz
 *.bz2
 app/config/config.json
+*.php
