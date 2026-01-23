@@ -159,6 +159,7 @@ if ($isAdmin) {
         ['Pages', 'Data-driven pages', '/admin?action=pages'],
         ['Users', 'Accounts &amp; roles', '/admin?action=users'],
         ['Roles', 'User roles', '/admin?action=roles'],
+        ['Topics', 'Site Topics', '/admin?action=topics'],
         ['Settings', 'Site configuration', '/admin?action=settings'],
         ['Themes', 'Enable &amp; switch', '/admin?action=themes'],
         ['Modules', 'Install &amp; manage', '/admin?action=modules'],
