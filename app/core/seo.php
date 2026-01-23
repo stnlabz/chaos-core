@@ -168,9 +168,15 @@ class seo
             '/public/themes/' . self::$theme . '/assets/images/logo.png',
             '/public/themes/' . self::$theme . '/assets/images/logo.jpg',
             '/public/themes/' . self::$theme . '/assets/images/logo.svg',
+            '/public/themes/' . self::$theme . '/assets/icons/logo.png',
+            '/public/themes/' . self::$theme . '/assets/icons/logo.jpg',
+            '/public/themes/' . self::$theme . '/assets/icons/logo.svg',
             '/public/assets/images/logo.png',
             '/public/assets/images/logo.jpg',
             '/public/assets/images/logo.svg',
+            '/public/assets/icons/logo.png',
+            '/public/assets/icons/logo.jpg',
+            '/public/assets/icons/logo.svg',
         ];
 
         foreach ($candidates as $path) {
@@ -450,7 +456,7 @@ class seo
         }
 
         // Important sections
-        if (in_array($href, ['/posts', '/pages', '/media', '/about', '/contact'], true)) {
+        if (in_array($href, ['/posts', '/pages', '/media'], true)) {
             return 0.8;
         }
 
