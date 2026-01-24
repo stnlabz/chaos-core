@@ -358,13 +358,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 if (!$hasAdminRole) {
                     throw new RuntimeException('roles.id=4 missing after seed.');
                 }
-
+                /**
+                 * Removed in 2.0.8
                 $db->query(
                     "INSERT INTO settings (name, value)
                      VALUES ('site_theme', 'default')
                      ON DUPLICATE KEY UPDATE value=VALUES(value)"
                 );
-		/**
+	
 		 * Removed in 2.0.8
                 $db->query(
                     "INSERT INTO themes (slug, installed, enabled, version, creator)
