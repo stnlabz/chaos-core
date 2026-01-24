@@ -36,16 +36,11 @@ if ($first === 'webhooks') {
     $skipTheme = true;
 }
 
-// The Themes Header (skip for API endpoints)
-if (!$skipTheme) {
-    include __DIR__ . "/public/themes/{$site_theme}/header.php";
-}
+// Header
+themes::render_header();
 
 // The Router
 // All routing gets dispatched from here
 include __DIR__ . '/app/router.php';
 
-// The Themes Footer (skip for API endpoints)
-if (!$skipTheme) {
-    include __DIR__ . "/public/themes/{$site_theme}/footer.php";
-}
+themes::render_footer();
