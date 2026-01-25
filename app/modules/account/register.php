@@ -23,15 +23,19 @@ declare(strict_types=1);
 
     $error = '';
     $username = '';
+    $name = '';
     $email = '';
 
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $username = trim((string) ($_POST['username'] ?? ''));
+        $name     = trim((string) ($_POST['name'] ?? ''));
         $email    = trim((string) ($_POST['email'] ?? ''));
         $pass     = (string) ($_POST['password'] ?? '');
 
-        if ($username === '' || $pass === '') {
-            $error = 'Username and password are required.';
+        if ($username === '' || $name === '' || $email === '' || $pass === '') {
+            $error = 'Username, Name, Email, and password are all required.';
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $error = 'A valid email address is required.';
         } else {
             $conn = $db->connect();
             if ($conn === false) {
@@ -41,24 +45,21 @@ declare(strict_types=1);
                 if (!is_string($hash) || $hash === '') {
                     $error = 'Password hashing failed.';
                 } else {
-                    $role = 1;
-
-                    $stmt = $conn->prepare("INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, ?, ?)");
+                    $role_id = 1;
+                    $stmt = $conn->prepare("INSERT INTO users (username, name, email, password_hash, role_id) VALUES (?, ?, ?, ?, ?)");
                     if ($stmt === false) {
-                        $error = 'DB prepare failed.';
+                        $error = 'Database error: Prepare failed.';
                     } else {
-                        $stmt->bind_param('ssss', $username, $email, $hash, $role);
-                        if (!$stmt->execute()) {
-                            $error = 'Could not create account (username may already exist).';
+                        $stmt->bind_param('ssssi', $username, $name, $email, $hash, $role_id);
+                        if ($stmt->execute()) {
+                            header('Location: /login');
+                            exit;
+                        } else {
+                            $error = 'Signup failed. Username or Email may already be taken.';
                         }
                         $stmt->close();
                     }
                 }
-            }
-
-            if ($error === '') {
-                header('Location: /login');
-                exit;
             }
         }
     }
@@ -89,13 +90,26 @@ declare(strict_types=1);
                     </div>
 
                     <div class="mb-2">
-                        <label class="small fw-semibold" for="email">Email (optional)</label>
+                        <label class="small fw-semibold" for="name">Full Name</label>
+                        <input
+                            type="text"
+                            name="name"
+                            id="name"
+                            class="form-control"
+                            value="<?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8'); ?>"
+                            required
+                        >
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="small fw-semibold" for="email">Email Address</label>
                         <input
                             type="email"
                             name="email"
                             id="email"
                             class="form-control"
                             value="<?= htmlspecialchars($email, ENT_QUOTES, 'UTF-8'); ?>"
+                            required
                         >
                     </div>
 
@@ -119,4 +133,3 @@ declare(strict_types=1);
 
     <?php
 })();
-
