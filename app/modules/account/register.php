@@ -1,11 +1,5 @@
 <?php
-
 declare(strict_types=1);
-
-/**
- * Signup (username-based)
- * Route: /signup
- */
 
 (function (): void {
     global $auth, $db;
@@ -33,103 +27,63 @@ declare(strict_types=1);
         $pass     = (string) ($_POST['password'] ?? '');
 
         if ($username === '' || $name === '' || $email === '' || $pass === '') {
-            $error = 'Username, Name, Email, and password are all required.';
-        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $error = 'A valid email address is required.';
+            $error = 'All fields are required.';
         } else {
             $conn = $db->connect();
-            if ($conn === false) {
-                $error = 'DB connection failed.';
-            } else {
-                $hash = password_hash($pass, PASSWORD_DEFAULT);
-                if (!is_string($hash) || $hash === '') {
-                    $error = 'Password hashing failed.';
-                } else {
-                    $role_id = 1;
-                    $stmt = $conn->prepare("INSERT INTO users (username, name, email, password_hash, role_id) VALUES (?, ?, ?, ?, ?)");
-                    if ($stmt === false) {
-                        $error = 'Database error: Prepare failed.';
-                    } else {
-                        $stmt->bind_param('ssssi', $username, $name, $email, $hash, $role_id);
-                        if ($stmt->execute()) {
-                            header('Location: /login');
-                            exit;
-                        } else {
-                            $error = 'Signup failed. Username or Email may already be taken.';
-                        }
-                        $stmt->close();
-                    }
+            $hash = password_hash($pass, PASSWORD_DEFAULT);
+            $role_id = 1; // Explicitly User role
+
+            $stmt = $conn->prepare("INSERT INTO users (username, name, email, password_hash, role_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())");
+            if ($stmt) {
+                $stmt->bind_param('ssssi', $username, $name, $email, $hash, $role_id);
+                if (!$stmt->execute()) {
+                    $error = 'Username or Email already exists.';
                 }
+                $stmt->close();
+            } else {
+                $error = 'Internal DB error.';
+            }
+
+            if ($error === '') {
+                header('Location: /login');
+                exit;
             }
         }
     }
-    ?>
+?>
 
-    <div class="container my-4 account-signup">
-        <div class="row">
-            <div class="col-12 col-md-6">
-                <h1 class="home-title">Sign Up</h1>
+<div class="container my-5 signup-box">
+    <div class="row justify-content-center">
+        <div class="col-md-5">
+            <h2 class="mb-3">Create Account</h2>
+            <?php if ($error !== ''): ?>
+                <div class="alert alert-danger py-2 small"><?= htmlspecialchars($error); ?></div>
+            <?php endif; ?>
 
-                <?php if ($error !== ''): ?>
-                    <div class="alert alert-danger small mb-2">
-                        <?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?>
-                    </div>
-                <?php endif; ?>
-
-                <form method="post" action="/signup">
-                    <div class="mb-2">
-                        <label class="small fw-semibold" for="username">Username</label>
-                        <input
-                            type="text"
-                            name="username"
-                            id="username"
-                            class="form-control"
-                            value="<?= htmlspecialchars($username, ENT_QUOTES, 'UTF-8'); ?>"
-                            required
-                        >
-                    </div>
-
-                    <div class="mb-2">
-                        <label class="small fw-semibold" for="name">Full Name</label>
-                        <input
-                            type="text"
-                            name="name"
-                            id="name"
-                            class="form-control"
-                            value="<?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8'); ?>"
-                            required
-                        >
-                    </div>
-
-                    <div class="mb-2">
-                        <label class="small fw-semibold" for="email">Email Address</label>
-                        <input
-                            type="email"
-                            name="email"
-                            id="email"
-                            class="form-control"
-                            value="<?= htmlspecialchars($email, ENT_QUOTES, 'UTF-8'); ?>"
-                            required
-                        >
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="small fw-semibold" for="password">Password</label>
-                        <input
-                            type="password"
-                            name="password"
-                            id="password"
-                            class="form-control"
-                            required
-                        >
-                    </div>
-
-                    <button type="submit" class="btn btn-primary btn-sm">Create Account</button>
-                    <a href="/login" class="btn btn-outline-secondary btn-sm ms-2">Back to Login</a>
-                </form>
-            </div>
+            <form method="post">
+                <div class="mb-2">
+                    <label class="small fw-bold">Username</label>
+                    <input type="text" name="username" class="form-control" value="<?= htmlspecialchars($username); ?>" required>
+                </div>
+                <div class="mb-2">
+                    <label class="small fw-bold">Display Name (Real Name)</label>
+                    <input type="text" name="name" class="form-control" value="<?= htmlspecialchars($name); ?>" required>
+                </div>
+                <div class="mb-2">
+                    <label class="small fw-bold">Email Address</label>
+                    <input type="email" name="email" class="form-control" value="<?= htmlspecialchars($email); ?>" required>
+                </div>
+                <div class="mb-3">
+                    <label class="small fw-bold">Password</label>
+                    <input type="password" name="password" class="form-control" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Sign Up</button>
+                <div class="mt-3 text-center">
+                    <a href="/login" class="small text-muted text-decoration-none">Already have an account? Login</a>
+                </div>
+            </form>
         </div>
     </div>
-
-    <?php
+</div>
+<?php
 })();
