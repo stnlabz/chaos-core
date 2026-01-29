@@ -140,10 +140,23 @@ declare(strict_types=1);
             }
 
             if (method_exists($md, 'markdown')) {
-                echo '<div class="page-body">' . (string)$md->markdown($body) . '</div>';
-                echo '</article></div>';
-                return;
-            }
+    echo '<div class="page-body">' . (string)$md->markdown($body) . '</div>';
+    
+    // --- Chaos Sharing Integration ---
+    $libPath = $_SERVER['DOCUMENT_ROOT'] . '/app/lib/share.php';
+    if (file_exists($libPath)) {
+        require_once $libPath;
+        if (function_exists('share_buttons')) {
+            $absUrl = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
+            echo '<hr class="chaos-divider">';
+            echo share_buttons($absUrl, $title);
+        }
+    }
+    // ---------------------------------
+
+    echo '</article></div>';
+    return;
+}
 
             if (method_exists($md, 'render')) {
                 echo '<div class="page-body">' . (string)$md->render($body) . '</div>';
