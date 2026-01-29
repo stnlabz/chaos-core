@@ -148,6 +148,22 @@ if (!class_exists('render_md')) {
                 },
                 $html
             );
+            
+            // 8.5) Chaos Shop Buttons
+		// Matches [Buy:product-slug]
+	    $html = preg_replace_callback(
+    	    '/\[Buy:([a-z0-9-]+)\]/i',
+    	    static function (array $matches): string {
+        	$slug = htmlspecialchars($matches[1], ENT_QUOTES, 'UTF-8');
+        	// Theme-neutral button class to match your core.css philosophy
+        	return '<div class="shop-action">
+                    <a href="/shop/checkout/' . $slug . '" class="chaos-btn chaos-btn-buy">
+                        Buy ' . ucfirst(str_replace('-', ' ', $slug)) . '
+                    </a>
+                </div>';
+    	},
+    	$html
+);
 
             // 9) Links
             $html = preg_replace_callback(
