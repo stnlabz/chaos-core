@@ -163,6 +163,21 @@ if (!class_exists('render_md')) {
                 </div>';
     	},
     	$html
+	);
+	
+	// 8.7) Social Reaction Bar
+// Matches [Social:slug]
+$html = preg_replace_callback(
+    '/\[Social:([a-z0-9-]+)\]/i',
+    static function (array $matches): string {
+        $slug = htmlspecialchars($matches[1], ENT_QUOTES, 'UTF-8');
+        return '<div class="chaos-social-bar" data-slug="'.$slug.'">
+                    <button class="heart-btn">❤️ <span class="count">0</span></button>
+                    <button class="fire-btn">🔥 <span class="count">0</span></button>
+                    <button class="comment-btn">💬</button>
+                </div>';
+    },
+    $html
 );
 
             // 9) Links
