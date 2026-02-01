@@ -1,0 +1,9 @@
+{
+  "slug": "filter",
+  "name": "Site Filter",
+  "version": "1.0.0",
+  "author": "Stn-Labz",
+  "description": "Distributed Site Filtering for ChaosCMS.",
+  "entry": "plugin.php",
+  "has_admin": false
+}
