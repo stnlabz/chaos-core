@@ -179,7 +179,7 @@ declare(strict_types=1);
                     </div>
                     
                     <div class="mb-2">
-                        <label class="small fw-semibold" for="name">Real Name (Forge Author)</label>
+                        <label class="small fw-semibold" for="name">Real Name</label>
                         <input type="text" name="name" id="name" class="form-control" value="<?= htmlspecialchars($name); ?>" required>
                     </div>
 
