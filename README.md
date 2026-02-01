@@ -1,14 +1,14 @@
 # ChAoS CMS Core
 
 ## Version
-v2.0.8
+v2.0.9
 
 ## Status
 **Stable**  
 Project is stable.
 
 ## Main is Development
- - Do not consider anything here on this page as **Latest**, 2.0.8 is in the **Releases**
+ - Do not consider anything here on this page as **Latest**, 2.0.9 is in the **Releases**
 
    **Things to note**
    - The **ChAoS CMS** does not rely on **Composer**
@@ -18,7 +18,8 @@ Project is stable.
 This release finalizes the Chaos CMS core, installer, updater, and admin tooling.  
 Architecture, update flow, and runtime behavior are now documented, versioned, and aligned.
 
-This marks the first **monitized** core of Chaos CMS Core.
+This marks the first **monitized** core of ChAoS CMS Core.
+This also marks the very first `sql` migration of the ChAoS CMS Core
 
 ---
 
@@ -43,6 +44,7 @@ This marks the first **monitized** core of Chaos CMS Core.
 - Package download with SHA256 verification
 - Lock + maintenance enforcement during updates
 - Safe failure recovery (maintenance + lock released on error)
+- `SQL` Migration and Update
 
 ### Admin
 - Dashboard stabilized and corrected
@@ -58,8 +60,17 @@ This marks the first **monitized** core of Chaos CMS Core.
 - Topics implemented as global taxonomy
 - Posts reference topics via `topic_id`
 - Topic selection already present in post editor
+- `public/plugins/filter` provides defaul content filtering
+  Update `/app/bootstrap.php` and add
+  ```php
+  <?php
+  if (function_exists('plugin_slot')) {
+    plugin_slot('filter');
+  }
+  ?>
+```
 
-### Documentation
+## Documentation
 - Core architecture documented
 - Bootstrap and theme resolution documented
 - Router behavior documented
@@ -75,6 +86,8 @@ This marks the first **monitized** core of Chaos CMS Core.
  - enhanced role awareness
  - built in Search Engine Optimization (SEO) xml generation.
  - Stripe webhook to manage Media and Post premium and Pro content
+ - Automated `SQL` Updating
+ - Social aspect s of `posts` and `media`
 ---
 
 ## Known Constraints
