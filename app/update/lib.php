@@ -11,6 +11,7 @@ declare(strict_types=1);
  * NOTE:
  * - No package structure requirements beyond locating an app/ directory.
  * - If the package contains an app/ directory, we apply it.
+ * - Patched v2.0.9: Automatically executes SQL migrations found in /sql.
  */
 
 function chaos_update_run(string $cmd, array $args): void
@@ -168,6 +169,51 @@ function chaos_update_status(): void
 }
 
 /**
+ * NEW: Automated SQL Migration Engine (v2.0.9)
+ * Scans for .sql files in the update package and runs them against the DB.
+ */
+function chaos_update_migrate(string $stagedSqlDir): void
+{
+    global $db;
+    
+    if (!isset($db) || !is_dir($stagedSqlDir)) return;
+
+    // Ensure we have a tracking table so we don't run the same script twice
+    $db->exec("CREATE TABLE IF NOT EXISTS `_migrations` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `filename` VARCHAR(255) UNIQUE,
+        `executed_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )");
+
+    $files = glob($stagedSqlDir . "/*.sql");
+    if (!$files) return;
+    
+    sort($files);
+
+    foreach ($files as $file) {
+        $filename = basename($file);
+        
+        $check = $db->fetch("SELECT id FROM _migrations WHERE filename = '".$db->escape($filename)."' LIMIT 1");
+        
+        if (!$check) {
+            chaos_update_log("MIGRATION: Running {$filename}");
+            $sql = file_get_contents($file);
+            
+            if ($sql && !empty(trim($sql))) {
+                try {
+                    $db->exec($sql);
+                    $db->exec("INSERT INTO _migrations (filename) VALUES ('".$db->escape($filename)."')");
+                    chaos_update_out("Migration successful: {$filename}");
+                } catch (Throwable $e) {
+                    chaos_update_log("MIGRATION FAILED: {$filename} - " . $e->getMessage());
+                    chaos_update_out("Error: Migration failed for {$filename}");
+                }
+            }
+        }
+    }
+}
+
+/**
  * Read local version string from /app/data/version.json.
  */
 function chaos_update_local_version(): string
@@ -212,8 +258,6 @@ function chaos_update_write_local_version(string $version): bool
 
 /**
  * Read update config from /app/update/update.json
- *
- * @return array<string,mixed>
  */
 function chaos_update_cfg(): array
 {
@@ -260,13 +304,6 @@ function chaos_update_http_get(string $url, int $timeoutSeconds = 10): string
 
 /**
  * Fetch remote manifest JSON.
- *
- * Expected fields for upgrade:
- * - version
- * - package_url
- * - sha256
- *
- * @return array<string,string>
  */
 function chaos_update_remote_manifest(): array
 {
@@ -462,13 +499,7 @@ function chaos_update_maintenance(bool $on): void
 /**
  * Apply a core package.
  *
- * Rules:
- * - If the package contains an app/ directory (directly OR under one wrapper dir), we apply it.
- * - We preserve /app/data and /app/update.
- *
- * Args:
- *  --file=/path/to/package.tar.gz
- *  --sha256=<hex> (optional)
+ * Patched v2.0.9: Includes SQL migration trigger.
  */
 function chaos_update_apply(array $args): void
 {
@@ -476,6 +507,7 @@ function chaos_update_apply(array $args): void
 
     $file = (string) ($args['file'] ?? '');
     $sha  = strtolower((string) ($args['sha256'] ?? ''));
+    $skipMigrations = isset($args['skip-migrations']);
 
     if ($file === '' || !is_file($file)) {
         chaos_update_out('apply: missing --file=... or file not found');
@@ -511,19 +543,37 @@ function chaos_update_apply(array $args): void
         return;
     }
 
-    // Locate app/ either at stage root or under first wrapper directory.
-    $stagedApp = '';
+    // NEW v2.0.9: Look for SQL folder in package
+    if (!$skipMigrations) {
+        $stagedSql = is_dir($stageDir . '/sql') ? $stageDir . '/sql' : '';
+        if ($stagedSql === '') {
+            $scan = @scandir($stageDir);
+            if (is_array($scan)) {
+                foreach ($scan as $item) {
+                    if ($item === '.' || $item === '..') continue;
+                    $candidate = $stageDir . '/' . $item . '/sql';
+                    if (is_dir($candidate)) {
+                        $stagedSql = $candidate;
+                        break;
+                    }
+                }
+            }
+        }
+        if ($stagedSql !== '') {
+            chaos_update_out("Found SQL migrations. Running...");
+            chaos_update_migrate($stagedSql);
+        }
+    }
 
+    // Locate app/ directory
+    $stagedApp = '';
     if (is_dir($stageDir . '/app')) {
         $stagedApp = $stageDir . '/app';
     } else {
         $scan = @scandir($stageDir);
         if (is_array($scan)) {
             foreach ($scan as $item) {
-                if ($item === '.' || $item === '..') {
-                    continue;
-                }
-
+                if ($item === '.' || $item === '..') continue;
                 $candidate = $stageDir . '/' . $item . '/app';
                 if (is_dir($candidate)) {
                     $stagedApp = $candidate;
@@ -541,23 +591,18 @@ function chaos_update_apply(array $args): void
         return;
     }
 
-    // Backup is best-effort (warn + continue).
     if (!chaos_update_backup_app($backupDir)) {
         chaos_update_out('apply: backup failed (continuing)');
         chaos_update_log('APPLY notice: backup failed (continuing)');
     }
 
-    // Copy staged app into live /app; preserve config + updater itself.
     if (!chaos_update_copy_dir($stagedApp, $p['app'], ['data', 'update'])) {
         chaos_update_out('apply: copy to /app failed');
         chaos_update_log('APPLY failed: copy failed');
-
-        // Rollback only if backup exists.
         if (is_dir($backupDir . '/app')) {
             chaos_update_out('Attempting rollback from: ' . $backupDir);
             chaos_update_restore_app($backupDir);
         }
-
         chaos_update_maintenance(false);
         chaos_update_unlock();
         return;
@@ -575,9 +620,6 @@ function chaos_update_apply(array $args): void
 
 /**
  * Rollback from a backup directory.
- *
- * Args:
- *  --from=/app/update/backup/<stamp>
  */
 function chaos_update_rollback(array $args): void
 {
@@ -615,10 +657,8 @@ function chaos_update_extract(string $file, string $toDir): bool
         if ($zip->open($file) !== true) {
             return false;
         }
-
         $ok = $zip->extractTo($toDir);
         $zip->close();
-
         return $ok;
     }
 
@@ -628,11 +668,8 @@ function chaos_update_extract(string $file, string $toDir): bool
         str_ends_with($fileLower, '.tar')
     ) {
         $cmd = 'tar -xf ' . escapeshellarg($file) . ' -C ' . escapeshellarg($toDir) . ' 2>/dev/null';
-        $out = [];
-        $rc = 0;
-
+        $out = []; $rc = 0;
         @exec($cmd, $out, $rc);
-
         return $rc === 0;
     }
 
@@ -645,24 +682,16 @@ function chaos_update_extract(string $file, string $toDir): bool
 function chaos_update_backup_app(string $backupDir): bool
 {
     $p = chaos_update_paths();
-
     $dst = rtrim($backupDir, '/') . '/app';
     @mkdir($dst, 0755, true);
 
-    if (!is_dir($dst)) {
-        return false;
-    }
+    if (!is_dir($dst)) return false;
 
     chaos_update_log('BACKUP start: ' . $dst);
-
-    // No reason to back up what we never overwrite during apply.
     $ok = chaos_update_copy_dir($p['app'], $dst, ['data', 'update']);
-
     chaos_update_log($ok ? 'BACKUP ok' : 'BACKUP failed');
-
     return $ok;
 }
-
 
 /**
  * Restore /app from backupDir/app
@@ -670,70 +699,43 @@ function chaos_update_backup_app(string $backupDir): bool
 function chaos_update_restore_app(string $backupDir): bool
 {
     $p = chaos_update_paths();
-
     $src = rtrim($backupDir, '/') . '/app';
-    if (!is_dir($src)) {
-        return false;
-    }
+    if (!is_dir($src)) return false;
 
     chaos_update_log('RESTORE start: ' . $src);
-
     $ok = chaos_update_copy_dir($src, $p['app']);
-
     chaos_update_log($ok ? 'RESTORE ok' : 'RESTORE failed');
-
     return $ok;
 }
 
 /**
- * Recursive copy (overwrites files). KISS.
- *
- * @param array<int,string> $excludeTop Top-level directory names to skip.
+ * Recursive copy.
  */
 function chaos_update_copy_dir(string $src, string $dst, array $excludeTop = []): bool
 {
-    if (!is_dir($src)) {
-        return false;
-    }
-
-    if (!is_dir($dst) && !@mkdir($dst, 0755, true)) {
-        return false;
-    }
+    if (!is_dir($src)) return false;
+    if (!is_dir($dst) && !@mkdir($dst, 0755, true)) return false;
 
     $items = @scandir($src);
-    if (!is_array($items)) {
-        return false;
-    }
+    if (!is_array($items)) return false;
 
     foreach ($items as $item) {
-        if ($item === '.' || $item === '..') {
-            continue;
-        }
-
-        if (in_array($item, $excludeTop, true)) {
-            continue;
-        }
+        if ($item === '.' || $item === '..') continue;
+        if (in_array($item, $excludeTop, true)) continue;
 
         $from = $src . '/' . $item;
         $to   = $dst . '/' . $item;
 
         if (is_dir($from)) {
-            if (!chaos_update_copy_dir($from, $to)) {
-                return false;
-            }
+            if (!chaos_update_copy_dir($from, $to)) return false;
             continue;
         }
-
         if (is_file($from)) {
-            if (!@copy($from, $to)) {
-                return false;
-            }
+            if (!@copy($from, $to)) return false;
         }
     }
-
     return true;
 }
-
 
 /**
  * Clear opcache if available.
@@ -744,4 +746,3 @@ function chaos_update_opcache_reset(): void
         @opcache_reset();
     }
 }
-
