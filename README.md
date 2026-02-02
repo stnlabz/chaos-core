@@ -61,14 +61,7 @@ This also marks the very first `sql` migration of the ChAoS CMS Core
 - Posts reference topics via `topic_id`
 - Topic selection already present in post editor
 - `public/plugins/filter` provides default content filtering
-  Update `/app/bootstrap.php` and add
-  ```php
-  <?php
-  if (function_exists('plugin_slot')) {
-    plugin_slot('filter');
-  }
-  ?>
-```
+ 
 
 ## Documentation
 - Core architecture documented
