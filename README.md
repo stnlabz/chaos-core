@@ -60,7 +60,7 @@ This also marks the very first `sql` migration of the ChAoS CMS Core
 - Topics implemented as global taxonomy
 - Posts reference topics via `topic_id`
 - Topic selection already present in post editor
-- `public/plugins/filter` provides defaul content filtering
+- `public/plugins/filter` provides default content filtering
   Update `/app/bootstrap.php` and add
   ```php
   <?php
