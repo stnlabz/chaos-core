@@ -224,3 +224,7 @@ seo::run($site_theme);
  * Social Media Sharing
  */
 require_once __DIR__ . '/lib/share.php';
+
+if (function_exists('plugin_slot')) {
+    plugin_slot('filter');
+}
