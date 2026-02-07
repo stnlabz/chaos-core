@@ -4,7 +4,7 @@
 v2.0.9
 
 ## Status
-**Stable**  
+**Stable**
 Project is stable.
 
 ## Main is Development
@@ -15,7 +15,7 @@ Project is stable.
 ---
 
 ## Summary
-This release finalizes the Chaos CMS core, installer, updater, and admin tooling.  
+This release finalizes the Chaos CMS core, installer, updater, and admin tooling.
 Architecture, update flow, and runtime behavior are now documented, versioned, and aligned.
 
 This marks the first **monitized** core of ChAoS CMS Core.
@@ -56,7 +56,7 @@ This also marks the very first `sql` migration of the ChAoS CMS Core
 - Admin CSS stabilized and centralized
 
 ### Content
-- Posts and Media are now Monitized
+- Posts and Media are now Monetized
 - Topics implemented as global taxonomy
 - Posts reference topics via `topic_id`
 - Topic selection already present in post editor
@@ -78,9 +78,9 @@ This also marks the very first `sql` migration of the ChAoS CMS Core
  - Video upload and playback
  - enhanced role awareness
  - built in Search Engine Optimization (SEO) xml generation.
- - Stripe webhook to manage Media and Post premium and Pro content
+ - Stripe webhook to manage Media and Post Premium and Pro content
  - Automated `SQL` Updating
- - Social aspect s of `posts` and `media`
+ - Social aspects of `posts` and `media`
 ---
 
 ## Known Constraints
