@@ -15,12 +15,12 @@ Project is stable.
 ---
 
 ## Summary
-This release finalizes the Chaos CMS core, installer, updater, and admin tooling.
+This finalizes the Chaos CMS core, installer, updater, and admin tooling.
 Architecture, update flow, and runtime behavior are now documented, versioned, and aligned.
 
-This marks the first **monitized** core of ChAoS CMS Core.
-This also marks the very first `sql` migration of the ChAoS CMS Core
-
+**2026-01-22**
+ - This marks the first **monetized** version of ChAoS CMS Core.
+ - This also marks the very first `sql` migration of the ChAoS CMS Core
 ---
 
 ## Highlights
