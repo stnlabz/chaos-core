@@ -63,4 +63,47 @@ class utility
             'can_admin' => in_array($roleId, [2, 3, 4], true),
         ];
     }
+    
+    public static function pretty_error($message) {
+            echo "<div style='
+                background: #1e1e1e;
+                color: #f88;
+                padding: 1.5em;
+                border: 2px solid #f00;
+                font-family: monospace;
+                margin: 2em;
+                border-radius: 10px;
+            '><strong>Error:</strong><br>$message</div>";
+        
+            $log_file = APP_ROOT . '/logs/site_errors.log'; // ?? This was missing!
+        
+            $log_line = "[" . date('Y-m-d H:i:s') . "] $message\n";
+        
+            if (file_exists($log_file) && filesize($log_file) > 1024 * 1024) { // 1MB
+                rename($log_file, $log_file . '.' . time());
+            }
+        
+            file_put_contents($log_file, $log_line, FILE_APPEND); // ?? Was missing semicolon
+        }
+        
+    	public static function throw_error($code = 500, $message = 'Unknown Error') {
+            http_response_code($code);
+        
+            $friendly = [
+                400 => 'Bad Request',
+                403 => 'Forbidden',
+                404 => 'Not Found',
+                500 => 'Internal Server Error',
+                503 => 'Service Unavailable'
+            ];
+        
+            $title = $friendly[$code] ?? 'Error';
+            pretty_error("[$code] $title: $message");
+        
+            // Optional: Log it
+            $log_line = "[" . date('Y-m-d H:i:s') . "] [$code] $title  $message\n";
+            @file_put_contents(APP_ROOT . '/logs/site_errors.log', $log_line, FILE_APPEND);
+        
+            exit;
+        }
 }
