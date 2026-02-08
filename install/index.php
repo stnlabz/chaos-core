@@ -264,6 +264,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         PRIMARY KEY (`id`),
                         UNIQUE KEY `uq_media_gallery_file` (`file_id`)
                     ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci",
+                    
+                    /**
+                     * Added social_comments and social_reactions in 2.1.0
+                    */
+                    
+                    "CREATE TABLE IF NOT EXISTS `media_social_comments` (
+  			`id` int(11) NOT NULL,
+  			`media_id` int(11) NOT NULL,
+  			`user_name` varchar(50) DEFAULT NULL,
+  			`comment_body` text NOT NULL,
+  			`created_at` timestamp NULL DEFAULT current_timestamp()
+		     ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;",
+		     
+		     "CREATE TABLE IF NOT EXISTS `media_social_reactions` (
+  			`id` int(11) NOT NULL,
+  			`media_id` int(11) NOT NULL,
+  			`type` varchar(10) DEFAULT NULL,
+  			`user_id` int(11) DEFAULT NULL,
+  			`ip_address` varchar(45) DEFAULT NULL
+		     ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;",
 
                     "CREATE TABLE IF NOT EXISTS `modules` (
                         `id` int(11) NOT NULL AUTO_INCREMENT,
