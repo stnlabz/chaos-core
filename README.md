@@ -8,10 +8,11 @@ v2.0.9
 Project is stable.
 
 ## Main is Development
- - Do not consider anything here on this page as **Latest**, 2.0.9 is in the **Releases**
+ - Do not consider anything here on this page as **Latest**, 2.0.9 is in the <a href="https://github.com/stnlabz/chaos-core/releases/tag/2.0.9">**Releases**</a>
 
    **Things to note**
    - The **ChAoS CMS** does not rely on **Composer**
+   - The **ChAoS CMS** is not just **another** CMS
 ---
 
 ## Summary
@@ -21,6 +22,7 @@ Architecture, update flow, and runtime behavior are now documented, versioned, a
 **2026-01-22**
  - This marks the first **monetized** version of ChAoS CMS Core.
  - This also marks the very first `sql` migration of the ChAoS CMS Core
+ - This also marks the very first `sql` automatic updating
 ---
 
 ## Highlights
@@ -60,7 +62,7 @@ Architecture, update flow, and runtime behavior are now documented, versioned, a
 - Topics implemented as global taxonomy
 - Posts reference topics via `topic_id`
 - Topic selection already present in post editor
-- `public/plugins/filter` provides default content filtering
+- `public/plugins/filter` provides default content filtering (pending migration to core)
  
 
 ## Documentation
@@ -77,7 +79,7 @@ Architecture, update flow, and runtime behavior are now documented, versioned, a
  - Core theme with user theme override
  - Video upload and playback
  - enhanced role awareness
- - built in Search Engine Optimization (SEO) xml generation.
+ - built in Search Engine Optimization (SEO) xml and AI txt/json generation.
  - Stripe webhook to manage Media and Post Premium and Pro content
  - Automated `SQL` Updating
  - Social aspects of `posts` and `media`
