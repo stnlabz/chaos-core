@@ -314,6 +314,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         PRIMARY KEY (`id`),
                         UNIQUE KEY `slug` (`slug`)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
+                    
+                    "CREATE TABLE IF NOT EXISTS `user_subscriptions` (
+  			`id` int(10) UNSIGNED NOT NULL,
+  			`user_id` int(10) UNSIGNED NOT NULL,
+  			`tier_id` int(10) UNSIGNED NOT NULL,
+  			`billing_interval` enum('monthly','yearly','lifetime') NOT NULL DEFAULT 'monthly',
+  			`status` enum('active','canceled','expired','pending') NOT NULL DEFAULT 'pending',
+  			`stripe_subscription_id` varchar(100) DEFAULT NULL,
+  			`stripe_customer_id` varchar(100) DEFAULT NULL,
+  			`started_at` datetime DEFAULT NULL,
+  			`expires_at` datetime DEFAULT NULL,
+  			`canceled_at` datetime DEFAULT NULL,
+  			`created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  			`updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp()
+		    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;",
 
                     "CREATE TABLE IF NOT EXISTS `themes` (
                         `id` int(11) NOT NULL AUTO_INCREMENT,
