@@ -210,7 +210,7 @@ class plugins
                 }
 
             } catch (\Throwable $e) {
-                self::log('Plugin load failed: ' . $slug . ' - ' . $e->getMessage());
+                //self::log('Plugin load failed: ' . $slug . ' - ' . $e->getMessage());
                 continue;
             }
         }
