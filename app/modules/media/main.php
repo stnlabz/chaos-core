@@ -10,7 +10,7 @@ declare(strict_types=1);
  *
  * Notes:
  * - Displays media gallery (images + video)
- * - Social interactions handled by chaos_action endpoints in this same file
+ * - Social interactions are handled by chaos_action endpoints in this same file
  * - Visibility controls listing visibility
  * - Premium controls viewing access (paid entitlement)
  */
@@ -88,18 +88,21 @@ declare(strict_types=1);
         return ($mime === 'video/mp4' || strpos($mime, 'video/') === 0);
     };
 
-    // Paid entitlement check (Stripe webhook inserts "paid" rows)
+    $fmtPrice = static function (string $price): string {
+        $p = (float)$price;
+        if (abs($p) < 0.005) {
+            return number_format(0.0, 1, '.', '');
+        }
+        return number_format($p, 2, '.', '');
+    };
+
+    // Paid entitlement check (Stripe webhook should insert "paid" rows)
     $hasPaid = static function (mysqli $conn, int $uid, string $refType, int $refId): bool {
         if ($uid <= 0 || $refId <= 0) {
             return false;
         }
 
-        $stmt = $conn->prepare("
-            SELECT 1
-            FROM finance_ledger
-            WHERE user_id=? AND ref_type=? AND ref_id=? AND status='paid'
-            LIMIT 1
-        ");
+        $stmt = $conn->prepare("SELECT 1 FROM finance_ledger WHERE user_id=? AND ref_type=? AND ref_id=? AND status='paid' LIMIT 1");
         if ($stmt === false) {
             return false;
         }
@@ -117,14 +120,7 @@ declare(strict_types=1);
     // - Admin/editor: always allowed
     // - Not logged in: locked
     // - Logged in: locked unless paid
-    $isPremiumLocked = static function (
-        mysqli $conn,
-        bool $loggedIn,
-        bool $isAdminOrEditor,
-        int $uid,
-        int $mediaId,
-        int $isPremium
-    ) use ($hasPaid): bool {
+    $isPremiumLocked = static function (mysqli $conn, bool $loggedIn, bool $isAdminOrEditor, int $uid, int $mediaId, int $isPremium) use ($hasPaid): bool {
         if ($isPremium !== 1) {
             return false;
         }
@@ -194,7 +190,7 @@ declare(strict_types=1);
         $isPremium = ((int)($row['is_premium'] ?? 0) === 1) ? 1 : 0;
         $locked = $isPremiumLocked($conn, $loggedIn, $isAdminOrEditor, (int)$userId, (int)$mediaId, (int)$isPremium);
 
-        // For premium locked items: block social actions (keeps premium truly gated)
+        // If premium locked, block social actions
         if ($locked) {
             echo json_encode(['ok' => false, 'error' => 'premium_required']);
             return;
@@ -211,10 +207,7 @@ declare(strict_types=1);
                 $kind = 'like';
             }
 
-            $stmt2 = $conn->prepare("
-                INSERT INTO media_social_reactions (media_id, user_id, kind, created_at)
-                VALUES (?, ?, ?, NOW())
-            ");
+            $stmt2 = $conn->prepare("INSERT INTO media_social_reactions (media_id, user_id, kind, created_at) VALUES (?, ?, ?, NOW())");
             if ($stmt2 === false) {
                 echo json_encode(['ok' => false, 'error' => 'db_prepare_failed']);
                 return;
@@ -245,10 +238,7 @@ declare(strict_types=1);
                 $comment = substr($comment, 0, 500);
             }
 
-            $stmt2 = $conn->prepare("
-                INSERT INTO media_social_comments (media_id, user_id, comment, created_at)
-                VALUES (?, ?, ?, NOW())
-            ");
+            $stmt2 = $conn->prepare("INSERT INTO media_social_comments (media_id, user_id, comment, created_at) VALUES (?, ?, ?, NOW())");
             if ($stmt2 === false) {
                 echo json_encode(['ok' => false, 'error' => 'db_prepare_failed']);
                 return;
@@ -294,16 +284,15 @@ declare(strict_types=1);
                 'ok' => true,
                 'logged_in' => $loggedIn ? 1 : 0,
                 'user' => $userName,
-                'counts' => ['like' => 0, 'love' => 0, 'laugh' => 0],
+                'counts' => [
+                    'like' => 0,
+                    'love' => 0,
+                    'laugh' => 0,
+                ],
                 'comments' => [],
             ];
 
-            $resR = $conn->query("
-                SELECT kind, COUNT(*) AS c
-                FROM media_social_reactions
-                WHERE media_id=" . (int)$mediaId . "
-                GROUP BY kind
-            ");
+            $resR = $conn->query("SELECT kind, COUNT(*) AS c FROM media_social_reactions WHERE media_id=" . (int)$mediaId . " GROUP BY kind");
             if ($resR instanceof mysqli_result) {
                 while ($r = $resR->fetch_assoc()) {
                     if (is_array($r)) {
@@ -403,6 +392,9 @@ declare(strict_types=1);
         $res->close();
     }
 
+    // -------------------------------------------------------------
+    // Render
+    // -------------------------------------------------------------
     ?>
     <div class="container my-4 media-index">
         <div class="d-flex align-items-center justify-content-between mb-3">
@@ -425,9 +417,7 @@ declare(strict_types=1);
         <div class="media-grid">
             <?php foreach ($items as $it): ?>
                 <?php
-                if (!is_array($it)) {
-                    continue;
-                }
+                if (!is_array($it)) continue;
 
                 $id       = (int)($it['id'] ?? 0);
                 $title    = trim((string)($it['title'] ?? ''));
@@ -438,8 +428,10 @@ declare(strict_types=1);
                 $st       = (int)($it['status'] ?? 1);
 
                 $isPremium = ((int)($it['is_premium'] ?? 0) === 1) ? 1 : 0;
-                $tier      = (string)($it['tier_required'] ?? 'free');
-                $price     = (string)($it['price'] ?? '');
+                $tier = (string)($it['tier_required'] ?? 'free');
+                $price = (string)($it['price'] ?? '');
+
+                $locked = $isPremiumLocked($conn, $loggedIn, $isAdminOrEditor, (int)$userId, (int)$id, (int)$isPremium);
 
                 $url = $rel !== '' ? $rel : '';
                 if ($url !== '' && $url[0] !== '/') {
@@ -448,21 +440,27 @@ declare(strict_types=1);
 
                 $isImg = $isImageMime($mime) && $url !== '' && is_file($docroot . $url);
                 $isVid = $isVideoMime($mime) && $url !== '' && is_file($docroot . $url);
+                if (!$isImg && !$isVid) continue;
 
-                if (!$isImg && !$isVid) {
-                    continue;
+                $meta = '';
+                if ($title !== '') {
+                    $meta = $title;
+                } elseif ($filename !== '') {
+                    $meta = $filename;
+                } else {
+                    $meta = 'Media #' . $id;
                 }
 
-                $meta = $title !== '' ? $title : ($filename !== '' ? $filename : ('Media #' . $id));
                 if ($st === 0) {
                     $meta = 'Unpublished · ' . $meta;
                 }
-
-                $locked = $isPremiumLocked($conn, $loggedIn, $isAdminOrEditor, (int)$userId, (int)$id, (int)$isPremium);
                 ?>
+
                 <a
                     class="media-tile<?= $locked ? ' is-locked' : ''; ?><?= $isVid ? ' media-video-tile' : ''; ?>"
-                    href="<?= $h($url); ?>"
+                    href="<?= $locked ? '#' : $h($url); ?>"
+                    target="<?= $locked ? '' : '_blank'; ?>"
+                    rel="<?= $locked ? '' : 'noopener'; ?>"
                     data-media-id="<?= (int)$id; ?>"
                     data-media-kind="<?= $locked ? 'locked' : ($isVid ? 'video' : 'image'); ?>"
                     data-media-full="<?= $locked ? '' : $h($url); ?>"
@@ -492,7 +490,7 @@ declare(strict_types=1);
                     <?php endif; ?>
 
                     <?php if ($price !== '' && $isPremium === 1): ?>
-                        <div class="media-price">$<?= $h($price); ?></div>
+                        <div class="media-price">$<?= $h($fmtPrice((string)$price)); ?></div>
                     <?php endif; ?>
 
                     <div class="media-overlay">
@@ -502,6 +500,7 @@ declare(strict_types=1);
                         <?php endif; ?>
                     </div>
                 </a>
+
             <?php endforeach; ?>
         </div>
     </div>
@@ -549,16 +548,16 @@ declare(strict_types=1);
     </div>
 
     <style>
-        /* keep width similar to 2.0.9 (not full-bleed) */
+        /* Keep width similar to your 2.0.9 “just right” feel */
         .media-index { max-width: 1180px; }
 
         .media-grid {
             display: grid;
             gap: 14px;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(2, 1fr);
         }
-        @media (min-width: 768px) { .media-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-        @media (min-width: 1200px) { .media-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+        @media (min-width: 768px) { .media-grid { grid-template-columns: repeat(4, 1fr); } }
+        @media (min-width: 1200px) { .media-grid { grid-template-columns: repeat(5, 1fr); } }
 
         .media-tile {
             display: block;
@@ -571,12 +570,10 @@ declare(strict_types=1);
             color: inherit;
         }
 
-        /* prevent distortion: aspect-ratio + cover */
         .media-tile img {
             display: block;
             width: 100%;
-            aspect-ratio: 4 / 3;
-            height: auto;
+            height: 200px;
             object-fit: cover;
         }
 
@@ -631,8 +628,7 @@ declare(strict_types=1);
         }
 
         .media-video-thumb {
-            aspect-ratio: 4 / 3;
-            width: 100%;
+            height: 200px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -661,7 +657,9 @@ declare(strict_types=1);
             line-height: 1.2;
         }
 
-        .media-tile.is-locked img { filter: blur(3px); }
+        .media-tile.is-locked img {
+            filter: blur(3px);
+        }
         .media-tile.is-locked::after {
             content: "🔒";
             position: absolute;
@@ -762,6 +760,7 @@ declare(strict_types=1);
             gap: 10px;
         }
         .media-social-comment-body { margin-top: 4px; font-size: 13px; line-height: 1.35; }
+
         .media-social-add { margin-top: 10px; display: flex; gap: 8px; align-items: center; }
     </style>
 
@@ -919,11 +918,10 @@ declare(strict_types=1);
                         if (lockText) lockText.textContent = 'This item is premium content. Log in to purchase and view.';
                         if (lockActions) lockActions.innerHTML = '<a class="btn btn-sm btn-primary" href="/login">Log in</a>';
                     } else {
-                        var p = (price && String(price).trim() !== '') ? (' $' + String(price).trim()) : '';
-                        if (lockText) lockText.textContent = 'This item is premium content' + p + '. Purchase required to view.';
+                        if (lockText) lockText.textContent = 'This item is premium content. Purchase required to view.';
                         if (lockActions) {
                             lockActions.innerHTML =
-                                '<a class="btn btn-sm btn-primary" href="/checkout?ref_type=media&ref_id=' + encodeURIComponent(String(currentMediaId)) + '">Purchase</a>';
+                                '<a class="btn btn-sm btn-primary" href="/checkout?type=media&id=' + encodeURIComponent(String(currentMediaId)) + '">Purchase</a>';
                         }
                     }
 
@@ -955,7 +953,7 @@ declare(strict_types=1);
                 syncSocial();
             }
 
-            // Click handler MUST be on document so tiles work
+            // Click handler on DOCUMENT (so tiles work)
             document.addEventListener('click', function (e) {
                 var close = e.target && e.target.getAttribute ? e.target.getAttribute('data-close') : null;
                 if (close === '1') {

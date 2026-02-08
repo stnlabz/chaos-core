@@ -1,16 +1,17 @@
 <?php
+
 declare(strict_types=1);
 
 /**
- * Chaos CMS — Core Module: Checkout
- *
- * Purpose:
- * - Handle paid access for MEDIA and POSTS only
- * - Stripe webhook writes to finance_ledger
+ * Chaos CMS DB — Core Module: Checkout
  *
  * Routes:
- *   /checkout?type=media&id={id}
- *   /checkout?type=post&id={id}
+ *   /checkout
+ *
+ * Notes:
+ * - Handles payment checkout for premium media/posts via Stripe Checkout Sessions.
+ * - Uses /checkout/create-session (same module) as the API endpoint.
+ * - No PDO. MySQLi only.
  */
 
 (function (): void {
@@ -29,30 +30,24 @@ declare(strict_types=1);
         return;
     }
 
-    $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
-    if ($path !== '/checkout' && strpos($path, '/checkout') !== 0) {
-        return;
-    }
-
     $h = static function (string $v): string {
         return htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
     };
 
-    // Auth context
     $loggedIn = false;
     $userId = 0;
+
     if (isset($auth) && $auth instanceof auth) {
-        $loggedIn = (bool)$auth->check();
-        if ($loggedIn) {
-            $uid = $auth->id();
-            if (is_int($uid) && $uid > 0) {
-                $userId = (int)$uid;
-            }
+        $loggedIn = $auth->check();
+        $uid = $auth->id();
+        if (is_int($uid) && $uid > 0) {
+            $userId = (int)$uid;
         }
     }
 
-    $type = (string)($_GET['type'] ?? '');
-    $id = (int)($_GET['id'] ?? 0);
+    $type = (string)($_GET['type'] ?? ($_GET['ref_type'] ?? ''));
+    $id = (int)($_GET['id'] ?? ($_GET['ref_id'] ?? 0));
+    $type = strtolower(trim($type));
 
     if (!in_array($type, ['media', 'post'], true) || $id <= 0) {
         http_response_code(400);
@@ -60,26 +55,17 @@ declare(strict_types=1);
         return;
     }
 
-    // Require login to purchase (matches how your entitlement/ledger works)
     if (!$loggedIn || $userId <= 0) {
-        echo '<div class="container my-4">';
-        echo '<div class="alert alert-warning">You must be logged in to purchase premium content.</div>';
-        echo '<a class="btn btn-primary" href="/login">Log in</a>';
-        echo '</div>';
+        echo '<div class="container my-4"><div class="alert alert-warning">Please <a href="/login">log in</a> to purchase.</div></div>';
         return;
     }
 
-    // Pull item info + price from DB
+    // Resolve item details for display only (API resolves again server-side)
     $title = '';
-    $amountCents = 0;
+    $priceStr = '0.00';
 
     if ($type === 'media') {
-        $stmt = $conn->prepare("
-            SELECT g.title, g.price
-            FROM media_gallery g
-            WHERE g.id=?
-            LIMIT 1
-        ");
+        $stmt = $conn->prepare("SELECT title, price FROM media_gallery WHERE id=? LIMIT 1");
         if ($stmt === false) {
             http_response_code(500);
             echo '<div class="container my-4"><div class="alert alert-danger">DB error.</div></div>';
@@ -93,21 +79,18 @@ declare(strict_types=1);
 
         if (!is_array($row)) {
             http_response_code(404);
-            echo '<div class="container my-4"><div class="alert alert-danger">Media item not found.</div></div>';
+            echo '<div class="container my-4"><div class="alert alert-danger">Not found.</div></div>';
             return;
         }
 
-        $title = (string)($row['title'] ?? '');
-        $price = (string)($row['price'] ?? '');
-        $amountCents = (int)round(((float)$price) * 100);
+        $title = trim((string)($row['title'] ?? ''));
+        $priceStr = (string)($row['price'] ?? '0.00');
+
+        if ($title === '') {
+            $title = 'Media #' . (string)$id;
+        }
     } else {
-        // Posts table name may differ in your build; this matches your checkout module intent.
-        $stmt = $conn->prepare("
-            SELECT p.title, p.price
-            FROM posts p
-            WHERE p.id=?
-            LIMIT 1
-        ");
+        $stmt = $conn->prepare("SELECT title, price FROM posts WHERE id=? LIMIT 1");
         if ($stmt === false) {
             http_response_code(500);
             echo '<div class="container my-4"><div class="alert alert-danger">DB error.</div></div>';
@@ -121,91 +104,93 @@ declare(strict_types=1);
 
         if (!is_array($row)) {
             http_response_code(404);
-            echo '<div class="container my-4"><div class="alert alert-danger">Post not found.</div></div>';
+            echo '<div class="container my-4"><div class="alert alert-danger">Not found.</div></div>';
             return;
         }
 
-        $title = (string)($row['title'] ?? '');
-        $price = (string)($row['price'] ?? '');
-        $amountCents = (int)round(((float)$price) * 100);
+        $title = trim((string)($row['title'] ?? ''));
+        $priceStr = (string)($row['price'] ?? '0.00');
+
+        if ($title === '') {
+            $title = 'Post #' . (string)$id;
+        }
     }
 
-    if ($amountCents <= 0) {
-        http_response_code(400);
-        echo '<div class="container my-4"><div class="alert alert-danger">This item is not priced for checkout.</div></div>';
-        return;
-    }
+    $fmtMoney = static function (string $v): string {
+        $f = (float)$v;
+        if (abs($f) < 0.005) {
+            return number_format(0.0, 1, '.', '');
+        }
+        return number_format($f, 2, '.', '');
+    };
 
-    $displayTitle = $title !== '' ? $title : (($type === 'media') ? ('Media #' . $id) : ('Post #' . $id));
-    $displayAmount = number_format($amountCents / 100, 2);
-
+    $priceDisplay = $fmtMoney($priceStr);
     ?>
-    <div class="container my-4" style="max-width: 820px;">
-        <h1 class="h3">Checkout</h1>
-        <div class="text-muted mb-3">Secure purchase via Stripe</div>
+    <div class="container my-4" style="max-width:780px;">
+        <h1 class="h3 mb-2">Checkout</h1>
+        <div class="text-muted small mb-3">Secure payment for premium content.</div>
 
         <div class="card">
             <div class="card-body">
-                <div class="d-flex flex-column gap-2">
-                    <div><strong>Item:</strong> <?= $h($displayTitle); ?></div>
-                    <div><strong>Type:</strong> <?= $h($type); ?></div>
-                    <div><strong>Price:</strong> $<?= $h($displayAmount); ?></div>
-                </div>
+                <div class="mb-2"><strong>Item:</strong> <?= $h($title); ?></div>
+                <div class="mb-3"><strong>Price:</strong> $<?= $h($priceDisplay); ?></div>
 
-                <hr>
+                <div id="checkoutError" class="alert alert-danger" style="display:none;"></div>
 
-                <button class="btn btn-primary" id="btnPay">Pay with Stripe</button>
-                <a class="btn btn-light" href="<?= $type === 'media' ? '/media' : '/posts'; ?>">Cancel</a>
+                <button id="payBtn" class="btn btn-primary" type="button">
+                    Continue
+                </button>
 
-                <div class="mt-3 small text-muted" id="payStatus"></div>
+                <a class="btn btn-link" href="<?= $type === 'media' ? '/media' : '/posts'; ?>">Cancel</a>
             </div>
         </div>
     </div>
 
     <script>
         (function () {
-            var btn = document.getElementById('btnPay');
-            var status = document.getElementById('payStatus');
+            var btn = document.getElementById('payBtn');
+            var err = document.getElementById('checkoutError');
 
-            function setStatus(msg) {
-                if (!status) return;
-                status.textContent = msg || '';
+            function showErr(msg) {
+                if (!err) return;
+                err.textContent = msg || 'Request failed.';
+                err.style.display = '';
             }
+
+            if (!btn) return;
 
             btn.addEventListener('click', function () {
                 btn.disabled = true;
-                setStatus('Creating Stripe session...');
+                if (err) err.style.display = 'none';
 
                 fetch('/checkout/create-session', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     credentials: 'same-origin',
                     body: JSON.stringify({
                         contentType: <?= json_encode($type); ?>,
-                        contentId: <?= (int)$id; ?>,
-                        amount: <?= (int)$amountCents; ?>
+                        contentId: <?= (int)$id; ?>
                     })
                 })
                 .then(function (r) { return r.json(); })
                 .then(function (data) {
-                    if (!data || data.error) {
+                    if (!data || !data.ok) {
                         btn.disabled = false;
-                        setStatus(data && data.error ? data.error : 'Request failed.');
+                        showErr((data && data.error) ? data.error : 'Request failed.');
                         return;
                     }
 
-                    if (!data.url) {
-                        btn.disabled = false;
-                        setStatus('Stripe session missing URL.');
+                    if (data.url) {
+                        window.location.href = data.url;
                         return;
                     }
 
-                    // Redirect to Stripe Checkout URL
-                    window.location.href = data.url;
+                    btn.disabled = false;
+                    showErr('Request failed.');
                 })
                 .catch(function () {
                     btn.disabled = false;
-                    setStatus('Request failed.');
+                    showErr('Request failed.');
                 });
             });
         })();

@@ -3,295 +3,345 @@
 declare(strict_types=1);
 
 /**
- * Checkout API Handler
- * Called from router for /checkout/create-session and /checkout/webhook
- * Bypasses theme system for pure JSON response
+ * Chaos CMS DB — Core Module: Checkout (API)
+ *
+ * Route:
+ *   POST /checkout/create-session
+ *
+ * Notes:
+ * - Same-origin JSON endpoint (no theme).
+ * - Creates a Stripe Checkout Session for media/post premium purchases.
+ * - Amount/description are resolved server-side from the database (never trusted from the browser).
+ * - No PDO. MySQLi only.
  */
 
-header('Content-Type: application/json; charset=utf-8');
+(function (): void {
+    global $db, $auth;
 
-global $db, $auth;
+    header('Content-Type: application/json; charset=utf-8');
 
-$out = static function (int $code, array $payload): void {
-    http_response_code($code);
-    echo json_encode($payload);
-    exit;
-};
-
-if (!isset($db) || !$db instanceof db) {
-    $out(500, ['error' => 'Database not available']);
-}
-
-$conn = $db->connect();
-if ($conn === false) {
-    $out(500, ['error' => 'DB connection failed']);
-}
-
-$path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
-$method = (string)($_SERVER['REQUEST_METHOD'] ?? 'GET');
-
-$hmac_equals = static function (string $a, string $b): bool {
-    if (function_exists('hash_equals')) {
-        return hash_equals($a, $b);
-    }
-    if (strlen($a) !== strlen($b)) {
-        return false;
-    }
-    $res = 0;
-    $len = strlen($a);
-    for ($i = 0; $i < $len; $i++) {
-        $res |= ord($a[$i]) ^ ord($b[$i]);
-    }
-    return $res === 0;
-};
-
-$get_setting = static function (mysqli $conn, string $key): string {
-    $stmt = $conn->prepare("SELECT value FROM site_settings WHERE `key`=? LIMIT 1");
-    if ($stmt === false) {
-        return '';
-    }
-    $stmt->bind_param('s', $key);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    $row = ($res instanceof mysqli_result) ? $res->fetch_assoc() : null;
-    $stmt->close();
-    if (!is_array($row)) {
-        return '';
-    }
-    return (string)($row['value'] ?? '');
-};
-
-$curl_json = static function (string $url, array $headers, array $payload): array {
-    $ch = curl_init($url);
-    if ($ch === false) {
-        return ['ok' => false, 'status' => 0, 'body' => 'curl_init_failed'];
+    if (!isset($db) || !$db instanceof db) {
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'error' => 'db_missing']);
+        return;
     }
 
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-
-    $body = curl_exec($ch);
-    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $err = curl_error($ch);
-    curl_close($ch);
-
-    if ($body === false) {
-        return ['ok' => false, 'status' => $status, 'body' => $err !== '' ? $err : 'curl_exec_failed'];
+    $conn = $db->connect();
+    if ($conn === false) {
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'error' => 'db_connect_failed']);
+        return;
     }
 
-    return ['ok' => true, 'status' => $status, 'body' => (string)$body];
-};
-
-// ---------------------------------------------------------------------
-// /checkout/create-session
-// ---------------------------------------------------------------------
-if ($path === '/checkout/create-session') {
-    if ($method !== 'POST') {
-        $out(405, ['error' => 'method_not_allowed']);
-    }
-
-    // Require login to purchase (ledger ties to users)
     $loggedIn = false;
     $userId = 0;
+
     if (isset($auth) && $auth instanceof auth) {
-        $loggedIn = (bool)$auth->check();
-        if ($loggedIn) {
-            $uid = $auth->id();
-            if (is_int($uid) && $uid > 0) {
-                $userId = (int)$uid;
-            }
+        $loggedIn = $auth->check();
+        $uid = $auth->id();
+        if (is_int($uid) && $uid > 0) {
+            $userId = (int)$uid;
         }
     }
+
     if (!$loggedIn || $userId <= 0) {
-        $out(401, ['error' => 'login_required']);
+        http_response_code(401);
+        echo json_encode(['ok' => false, 'error' => 'login_required']);
+        return;
     }
 
-    $raw = file_get_contents('php://input');
-    if (!is_string($raw) || trim($raw) === '') {
-        $out(400, ['error' => 'missing_json']);
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['ok' => false, 'error' => 'method_not_allowed']);
+        return;
     }
 
-    $data = json_decode($raw, true);
-    if (!is_array($data)) {
-        $out(400, ['error' => 'bad_json']);
+    // -------------------------------------------------------------
+    // Input (JSON preferred, form-data tolerated)
+    // -------------------------------------------------------------
+    $raw = (string)file_get_contents('php://input');
+    $data = [];
+    if ($raw !== '') {
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            $data = $decoded;
+        }
     }
 
-    $contentType = (string)($data['contentType'] ?? '');
-    $contentId = (int)($data['contentId'] ?? 0);
-    $amount = (int)($data['amount'] ?? 0);
+    $type = (string)($data['contentType'] ?? $data['type'] ?? $_POST['contentType'] ?? $_POST['type'] ?? $_POST['ref_type'] ?? '');
+    $id = (int)($data['contentId'] ?? $data['id'] ?? $_POST['contentId'] ?? $_POST['id'] ?? $_POST['ref_id'] ?? 0);
 
-    if (!in_array($contentType, ['media', 'post'], true) || $contentId <= 0 || $amount <= 0) {
-        $out(400, ['error' => 'invalid_checkout_parameters']);
+    $type = strtolower(trim($type));
+
+    if (!in_array($type, ['media', 'post'], true) || $id <= 0) {
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'error' => 'invalid_parameters']);
+        return;
     }
 
-    $stripeSecret = $get_setting($conn, 'stripe_secret_key');
-    if ($stripeSecret === '') {
-        $out(500, ['error' => 'stripe_secret_missing']);
-    }
-
-    $siteUrl = $get_setting($conn, 'site_url');
-    if ($siteUrl === '') {
-        // Fallback: build from host
-        $host = (string)($_SERVER['HTTP_HOST'] ?? '');
-        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-        $siteUrl = $host !== '' ? ($scheme . '://' . $host) : '';
-    }
-    if ($siteUrl === '') {
-        $out(500, ['error' => 'site_url_missing']);
-    }
-
-    // Item title for Stripe display
-    $itemTitle = '';
-    if ($contentType === 'media') {
-        $stmt = $conn->prepare("SELECT title FROM media_gallery WHERE id=? LIMIT 1");
+    // -------------------------------------------------------------
+    // Settings lookup (DB-driven)
+    // -------------------------------------------------------------
+    $get_setting = static function (mysqli $conn, string $key): string {
+        // Primary: shop_settings(name,value)
+        $stmt = $conn->prepare("SELECT value FROM shop_settings WHERE name=? LIMIT 1");
         if ($stmt !== false) {
-            $stmt->bind_param('i', $contentId);
+            $stmt->bind_param('s', $key);
             $stmt->execute();
             $res = $stmt->get_result();
             $row = ($res instanceof mysqli_result) ? $res->fetch_assoc() : null;
             $stmt->close();
-            if (is_array($row)) {
-                $itemTitle = (string)($row['title'] ?? '');
+            if (is_array($row) && isset($row['value'])) {
+                return (string)$row['value'];
             }
         }
-        if ($itemTitle === '') {
-            $itemTitle = 'Media #' . $contentId;
+
+        // Fallback: site_settings(name,value)
+        $stmt2 = $conn->prepare("SELECT value FROM site_settings WHERE name=? LIMIT 1");
+        if ($stmt2 !== false) {
+            $stmt2->bind_param('s', $key);
+            $stmt2->execute();
+            $res2 = $stmt2->get_result();
+            $row2 = ($res2 instanceof mysqli_result) ? $res2->fetch_assoc() : null;
+            $stmt2->close();
+            if (is_array($row2) && isset($row2['value'])) {
+                return (string)$row2['value'];
+            }
+        }
+
+        // Fallback: settings(setting_key, setting_value)
+        $stmt3 = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key=? LIMIT 1");
+        if ($stmt3 !== false) {
+            $stmt3->bind_param('s', $key);
+            $stmt3->execute();
+            $res3 = $stmt3->get_result();
+            $row3 = ($res3 instanceof mysqli_result) ? $res3->fetch_assoc() : null;
+            $stmt3->close();
+            if (is_array($row3) && isset($row3['setting_value'])) {
+                return (string)$row3['setting_value'];
+            }
+        }
+
+        return '';
+    };
+
+    $stripeSecretKey = $get_setting($conn, 'stripe_sk');
+    if ($stripeSecretKey === '') {
+        $stripeSecretKey = $get_setting($conn, 'stripe_secret_key');
+    }
+
+    if ($stripeSecretKey === '') {
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'error' => 'stripe_secret_missing']);
+        return;
+    }
+
+    // -------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------
+    $money_to_cents = static function (string $price): int {
+        $p = trim($price);
+        if ($p === '') {
+            return 0;
+        }
+
+        if (!preg_match('/^-?\d+(\.\d{1,4})?$/', $p)) {
+            $p = (string)((float)$p);
+        }
+
+        $f = (float)$p;
+        $cents = (int)round($f * 100);
+        if ($cents < 0) {
+            $cents = 0;
+        }
+        return $cents;
+    };
+
+    $already_paid = static function (mysqli $conn, int $userId, string $refType, int $refId): bool {
+        $stmt = $conn->prepare("SELECT 1 FROM finance_ledger WHERE user_id=? AND ref_type=? AND ref_id=? AND status='paid' LIMIT 1");
+        if ($stmt === false) {
+            return false;
+        }
+
+        $stmt->bind_param('isi', $userId, $refType, $refId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $ok = ($res instanceof mysqli_result) ? (bool)$res->fetch_row() : false;
+        $stmt->close();
+
+        return $ok;
+    };
+
+    $insert_free_paid = static function (mysqli $conn, int $userId, string $refType, int $refId): bool {
+        if ($already_paid($conn, $userId, $refType, $refId)) {
+            return true;
+        }
+
+        $stmt = $conn->prepare("
+            INSERT INTO finance_ledger (user_id, ref_type, ref_id, amount, currency, status, created_at)
+            VALUES (?, ?, ?, 0, 'usd', 'paid', NOW())
+        ");
+        if ($stmt === false) {
+            return false;
+        }
+
+        $stmt->bind_param('isi', $userId, $refType, $refId);
+        $ok = $stmt->execute();
+        $stmt->close();
+
+        return (bool)$ok;
+    };
+
+    // -------------------------------------------------------------
+    // Resolve item (server-side)
+    // -------------------------------------------------------------
+    $title = '';
+    $priceStr = '0.00';
+    $creatorId = 0;
+
+    if ($type === 'media') {
+        $stmt = $conn->prepare("SELECT id, title, price, user_id FROM media_gallery WHERE id=? LIMIT 1");
+        if ($stmt === false) {
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => 'db_prepare_failed']);
+            return;
+        }
+        $stmt->bind_param('i', $id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $row = ($res instanceof mysqli_result) ? $res->fetch_assoc() : null;
+        $stmt->close();
+
+        if (!is_array($row)) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'not_found']);
+            return;
+        }
+
+        $title = trim((string)($row['title'] ?? ''));
+        $priceStr = (string)($row['price'] ?? '0.00');
+        $creatorId = (int)($row['user_id'] ?? 0);
+
+        if ($title === '') {
+            $title = 'Media #' . (string)$id;
         }
     } else {
-        $stmt = $conn->prepare("SELECT title FROM posts WHERE id=? LIMIT 1");
-        if ($stmt !== false) {
-            $stmt->bind_param('i', $contentId);
-            $stmt->execute();
-            $res = $stmt->get_result();
-            $row = ($res instanceof mysqli_result) ? $res->fetch_assoc() : null;
-            $stmt->close();
-            if (is_array($row)) {
-                $itemTitle = (string)($row['title'] ?? '');
-            }
+        $stmt = $conn->prepare("SELECT id, title, price, user_id FROM posts WHERE id=? LIMIT 1");
+        if ($stmt === false) {
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => 'db_prepare_failed']);
+            return;
         }
-        if ($itemTitle === '') {
-            $itemTitle = 'Post #' . $contentId;
+        $stmt->bind_param('i', $id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $row = ($res instanceof mysqli_result) ? $res->fetch_assoc() : null;
+        $stmt->close();
+
+        if (!is_array($row)) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'not_found']);
+            return;
+        }
+
+        $title = trim((string)($row['title'] ?? ''));
+        $priceStr = (string)($row['price'] ?? '0.00');
+        $creatorId = (int)($row['user_id'] ?? 0);
+
+        if ($title === '') {
+            $title = 'Post #' . (string)$id;
         }
     }
 
-    // Stripe Checkout Session
-    $payload = [
+    if ($already_paid($conn, $userId, $type, $id)) {
+        echo json_encode(['ok' => true, 'already_paid' => 1, 'url' => ($type === 'media') ? '/media' : '/posts']);
+        return;
+    }
+
+    $amountCents = $money_to_cents($priceStr);
+
+    if ($amountCents <= 0) {
+        $ok = $insert_free_paid($conn, $userId, $type, $id);
+        if (!$ok) {
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => 'ledger_insert_failed']);
+            return;
+        }
+
+        echo json_encode(['ok' => true, 'free' => 1, 'url' => ($type === 'media') ? '/media' : '/posts']);
+        return;
+    }
+
+    // -------------------------------------------------------------
+    // Create Stripe Checkout Session
+    // -------------------------------------------------------------
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = (string)($_SERVER['HTTP_HOST'] ?? 'localhost');
+    $baseUrl = $scheme . '://' . $host;
+
+    $successUrl = $baseUrl . '/checkout?type=' . rawurlencode($type) . '&id=' . rawurlencode((string)$id) . '&success=1';
+    $cancelUrl  = $baseUrl . '/checkout?type=' . rawurlencode($type) . '&id=' . rawurlencode((string)$id) . '&cancel=1';
+
+    $fields = [
         'mode' => 'payment',
-        'success_url' => $siteUrl . '/checkout?type=' . $contentType . '&id=' . $contentId,
-        'cancel_url'  => $siteUrl . '/checkout?type=' . $contentType . '&id=' . $contentId,
-        'line_items' => [
-            [
-                'quantity' => 1,
-                'price_data' => [
-                    'currency' => 'usd',
-                    'unit_amount' => $amount,
-                    'product_data' => [
-                        'name' => $itemTitle,
-                    ],
-                ],
-            ],
-        ],
-        'metadata' => [
-            'ref_type' => $contentType,
-            'ref_id' => (string)$contentId,
-            'user_id' => (string)$userId,
-        ],
+        'success_url' => $successUrl,
+        'cancel_url' => $cancelUrl,
+        'client_reference_id' => (string)$userId,
+        'metadata[ref_type]' => $type,
+        'metadata[ref_id]' => (string)$id,
+        'metadata[creator_id]' => (string)$creatorId,
+        'metadata[user_id]' => (string)$userId,
+        'line_items[0][quantity]' => '1',
+        'line_items[0][price_data][currency]' => 'usd',
+        'line_items[0][price_data][unit_amount]' => (string)$amountCents,
+        'line_items[0][price_data][product_data][name]' => $title,
     ];
-
-    $resp = $curl_json(
-        'https://api.stripe.com/v1/checkout/sessions',
-        [
-            'Authorization: Bearer ' . $stripeSecret,
-            'Content-Type: application/x-www-form-urlencoded'
-        ],
-        [] // not used (we are not using form encoding here)
-    );
-
-    /**
-     * IMPORTANT:
-     * Stripe expects x-www-form-urlencoded, not JSON.
-     * We will do a proper form-encoded request below using curl_setopt.
-     */
 
     $ch = curl_init('https://api.stripe.com/v1/checkout/sessions');
     if ($ch === false) {
-        $out(500, ['error' => 'stripe_init_failed']);
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'error' => 'curl_init_failed']);
+        return;
     }
-
-    // Build form-encoded fields (minimal, reliable)
-    $fields = [
-        'mode' => 'payment',
-        'success_url' => $payload['success_url'],
-        'cancel_url'  => $payload['cancel_url'],
-        'line_items[0][quantity]' => '1',
-        'line_items[0][price_data][currency]' => 'usd',
-        'line_items[0][price_data][unit_amount]' => (string)$amount,
-        'line_items[0][price_data][product_data][name]' => $itemTitle,
-        'metadata[ref_type]' => $contentType,
-        'metadata[ref_id]' => (string)$contentId,
-        'metadata[user_id]' => (string)$userId,
-    ];
 
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: Bearer ' . $stripeSecret]);
     curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($fields));
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $stripeSecretKey,
+        'Content-Type: application/x-www-form-urlencoded',
+    ]);
 
-    $body = curl_exec($ch);
-    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $err = curl_error($ch);
+    $resp = curl_exec($ch);
+    $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if ($body === false) {
-        $out(500, ['error' => 'stripe_request_failed', 'detail' => $err !== '' ? $err : 'curl_exec_failed']);
+    if (!is_string($resp) || $resp === '') {
+        http_response_code(502);
+        echo json_encode(['ok' => false, 'error' => 'stripe_no_response']);
+        return;
     }
 
-    $session = json_decode((string)$body, true);
-    if (!is_array($session)) {
-        $out(500, ['error' => 'stripe_bad_response', 'status' => $status]);
+    $out = json_decode($resp, true);
+    if (!is_array($out)) {
+        http_response_code(502);
+        echo json_encode(['ok' => false, 'error' => 'stripe_bad_json', 'http' => $http]);
+        return;
     }
 
-    if ($status < 200 || $status >= 300) {
-        $out(500, ['error' => 'stripe_error', 'status' => $status, 'stripe' => $session]);
+    if ($http >= 400 || isset($out['error'])) {
+        http_response_code(502);
+        echo json_encode(['ok' => false, 'error' => 'stripe_error', 'http' => $http, 'stripe' => $out['error'] ?? $out]);
+        return;
     }
 
-    $url = (string)($session['url'] ?? '');
+    $url = (string)($out['url'] ?? '');
     if ($url === '') {
-        $out(500, ['error' => 'stripe_missing_url']);
+        http_response_code(502);
+        echo json_encode(['ok' => false, 'error' => 'stripe_missing_url', 'http' => $http]);
+        return;
     }
 
-    $out(200, ['ok' => true, 'url' => $url]);
-}
-
-// ---------------------------------------------------------------------
-// /checkout/webhook (stub handler — keeps JSON clean and MySQLi only)
-// ---------------------------------------------------------------------
-if ($path === '/checkout/webhook') {
-    if ($method !== 'POST') {
-        $out(405, ['error' => 'method_not_allowed']);
-    }
-
-    // NOTE: This is a minimal shell so your endpoint exists and does not output HTML.
-    // Your existing webhook logic (if already elsewhere) can replace this.
-    $webhookSecret = $get_setting($conn, 'stripe_webhook_secret');
-    if ($webhookSecret === '') {
-        $out(500, ['error' => 'stripe_webhook_secret_missing']);
-    }
-
-    // Read raw body
-    $payload = file_get_contents('php://input');
-    if (!is_string($payload) || $payload === '') {
-        $out(400, ['error' => 'empty_payload']);
-    }
-
-    // If you verify signatures in your build, wire it here.
-    // We leave clean OK so Stripe doesn’t keep retrying while you restore your canonical handler.
-    $out(200, ['ok' => true]);
-}
-
-$out(404, ['error' => 'not_found']);
+    echo json_encode(['ok' => true, 'url' => $url]);
+})();
 
