@@ -9,12 +9,12 @@ Without a database connection, this platform does work but without users, module
 3. Fill in the required data on the form
 
 Some key things will happen here.
-1. Your database connection data will be stored in /app/config/congig.json
+1. Your database connection data will be stored in /app/config/config.json
 2. The install directory will be deleted
 3. You should be redirected to /login
 
-Once at login, login to the site using the username/password you set during the install
-Then after you have been logged in, it it recommended that you go to /admin then settings and setup the rest of your site.
+Once at login, login to the site using the username/password you setup during the install
+Then after you have been logged in, it it recommended that you go to /admin, then settings, and setup the rest of your site.
 
 If you happen to stumble upon any issues, please go to https://github.com/stnlabz/chaos-core and submit an issue.
 
