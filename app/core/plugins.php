@@ -526,16 +526,4 @@ class plugins
     {
         return (string) preg_replace('~[^a-z0-9_\-]~i', '', $slug);
     }
-
-    /**
-     * Log plugin message.
-     *
-     * @param string $msg
-     * @return void
-     */
-    protected static function log(string $msg): void
-    {
-        $line = '[' . gmdate('Y-m-d H:i:s') . 'Z] [PLUGINS] ' . $msg . PHP_EOL;
-        error_log($line);
-    }
 }
