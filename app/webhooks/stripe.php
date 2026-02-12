@@ -2,21 +2,25 @@
 declare(strict_types=1);
 
 /**
- * Chaos CMS — Stripe Webhook
+ * Chaos CMS — Stripe Webhook (NO SDK)
  *
  * Path: /app/webhooks/stripe.php
  *
- * Handles completed Stripe checkout sessions and records
- * purchases into finance_ledger.
+ * - Verifies Stripe signature manually
+ * - Parses checkout.session.completed
+ * - Inserts finance_ledger row
+ *
+ * ZERO external dependencies.
  */
 
-use Stripe\Webhook;
+header('Content-Type: application/json; charset=utf-8');
 
-require_once __DIR__ . '/../core/init.php';
+// -----------------------------------------------------
+// Bootstrap DB
+// -----------------------------------------------------
+require_once __DIR__ . '/../core/bootstrap.php'; // use YOUR real bootstrap file
 
 global $db;
-
-header('Content-Type: application/json');
 
 if (!isset($db) || !$db instanceof db) {
     http_response_code(500);
@@ -31,130 +35,137 @@ if (!$conn instanceof mysqli) {
     exit;
 }
 
-/* ---------------------------------------------------------
- * Load Stripe secrets from DB-backed site settings
- * --------------------------------------------------------- */
- /**
-$settings = $db->fetch("
-    SELECT stripe_secret_key, stripe_webhook_secret
-    FROM site_settings
-    LIMIT 1
-");
+// -----------------------------------------------------
+// Load webhook secret from settings table
+// -----------------------------------------------------
+$stmt = $conn->prepare("SELECT value FROM settings WHERE name='stripe_webhook_secret' LIMIT 1");
+$stmt->execute();
+$res = $stmt->get_result();
+$row = $res ? $res->fetch_assoc() : null;
+$stmt->close();
 
-if (!is_array($settings)) {
+$webhookSecret = (string)($row['value'] ?? '');
+
+if ($webhookSecret === '') {
     http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'stripe_settings_missing']);
+    echo json_encode(['ok' => false, 'error' => 'webhook_secret_missing']);
     exit;
 }
 
-*/
-$getSetting = static function (mysqli $conn, string $name): string {
-    $stmt = $conn->prepare("SELECT value FROM settings WHERE name=? LIMIT 1");
-    if ($stmt === false) {
-        return '';
-    }
+// -----------------------------------------------------
+// Read raw payload
+// -----------------------------------------------------
+$payload = file_get_contents('php://input');
+$sigHeader = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '';
 
-    $stmt->bind_param('s', $name);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    $val = '';
-
-    if ($res instanceof mysqli_result) {
-        $row = $res->fetch_assoc();
-        if (is_array($row) && isset($row['value'])) {
-            $val = (string)$row['value'];
-        }
-    }
-
-    $stmt->close();
-    return $val;
-};
-
-$stripeSecret  = trim($getSetting($conn, 'stripe_secret_key'));
-$webhookSecret = trim($getSetting($conn, 'stripe_webhook_secret'));
-/**
-$stripeSecret  = (string)($settings['stripe_secret_key'] ?? '');
-$webhookSecret = (string)($settings['stripe_webhook_secret'] ?? '');
-*/
-if ($stripeSecret === '' || $webhookSecret === '') {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'stripe_not_configured']);
-    exit;
-}
-
-\Stripe\Stripe::setApiKey($stripeSecret);
-
-/* ---------------------------------------------------------
- * Read raw payload
- * --------------------------------------------------------- */
-$payload    = file_get_contents('php://input');
-$sigHeader  = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '';
-
-try {
-    $event = Webhook::constructEvent($payload, $sigHeader, $webhookSecret);
-} catch (\Throwable $e) {
+if ($payload === '' || $sigHeader === '') {
     http_response_code(400);
-    echo json_encode(['ok' => false, 'error' => 'invalid_signature']);
+    echo json_encode(['ok' => false, 'error' => 'missing_signature']);
     exit;
 }
 
-/* ---------------------------------------------------------
- * Handle checkout completion
- * --------------------------------------------------------- */
-if ($event->type !== 'checkout.session.completed') {
+// -----------------------------------------------------
+// Verify Stripe signature manually
+// -----------------------------------------------------
+$parts = explode(',', $sigHeader);
+$sig = '';
+$timestamp = '';
+
+foreach ($parts as $part) {
+    if (strpos($part, 't=') === 0) {
+        $timestamp = substr($part, 2);
+    }
+    if (strpos($part, 'v1=') === 0) {
+        $sig = substr($part, 3);
+    }
+}
+
+if ($timestamp === '' || $sig === '') {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'error' => 'invalid_signature_header']);
+    exit;
+}
+
+$signedPayload = $timestamp . '.' . $payload;
+$expectedSig = hash_hmac('sha256', $signedPayload, $webhookSecret);
+
+if (!hash_equals($expectedSig, $sig)) {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'error' => 'signature_mismatch']);
+    exit;
+}
+
+// -----------------------------------------------------
+// Parse event
+// -----------------------------------------------------
+$event = json_decode($payload, true);
+
+if (!is_array($event)) {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'error' => 'invalid_json']);
+    exit;
+}
+
+if (($event['type'] ?? '') !== 'checkout.session.completed') {
     echo json_encode(['ok' => true, 'ignored' => true]);
     exit;
 }
 
-$session = $event->data->object;
-
-/*
- * REQUIRED metadata (already defined in your checkout module):
- *  user_id
- *  ref_type   (media | post)
- *  ref_id
- */
-$meta = $session->metadata ?? null;
-
-if (!$meta) {
+$session = $event['data']['object'] ?? null;
+if (!is_array($session)) {
     http_response_code(400);
-    echo json_encode(['ok' => false, 'error' => 'missing_metadata']);
+    echo json_encode(['ok' => false, 'error' => 'missing_session']);
     exit;
 }
 
-$userId  = (int)($meta->user_id ?? 0);
-$refType = (string)($meta->ref_type ?? '');
-$refId   = (int)($meta->ref_id ?? 0);
+// -----------------------------------------------------
+// Extract metadata
+// -----------------------------------------------------
+$meta = $session['metadata'] ?? [];
 
-if ($userId <= 0 || $refId <= 0 || !in_array($refType, ['media', 'post'], true)) {
+$userId  = (int)($meta['user_id'] ?? 0);
+$refType = (string)($meta['ref_type'] ?? '');
+$refId   = (int)($meta['ref_id'] ?? 0);
+
+if ($userId <= 0 || $refId <= 0 || !in_array($refType, ['media','post'], true)) {
     http_response_code(400);
     echo json_encode(['ok' => false, 'error' => 'invalid_metadata']);
     exit;
 }
 
-/* ---------------------------------------------------------
- * Amounts
- * --------------------------------------------------------- */
-$amountCents = (int)($session->amount_total ?? 0);
-$amount      = number_format($amountCents / 100, 2, '.', '');
-$currency    = strtoupper((string)($session->currency ?? 'usd'));
-$stripeId    = (string)($session->payment_intent ?? '');
+// -----------------------------------------------------
+// Prevent duplicate ledger entries
+// -----------------------------------------------------
+$stmt = $conn->prepare("
+    SELECT id FROM finance_ledger
+    WHERE user_id=? AND ref_type=? AND ref_id=? AND status='paid'
+    LIMIT 1
+");
+$stmt->bind_param('isi', $userId, $refType, $refId);
+$stmt->execute();
+$res = $stmt->get_result();
+$exists = $res ? $res->fetch_row() : null;
+$stmt->close();
 
-/* ---------------------------------------------------------
- * Insert ledger record
- * --------------------------------------------------------- */
+if ($exists) {
+    echo json_encode(['ok' => true, 'duplicate' => true]);
+    exit;
+}
+
+// -----------------------------------------------------
+// Insert ledger
+// -----------------------------------------------------
+$amountCents = (int)($session['amount_total'] ?? 0);
+$amount = number_format($amountCents / 100, 2, '.', '');
+$currency = strtoupper((string)($session['currency'] ?? 'usd'));
+$stripeId = (string)($session['payment_intent'] ?? '');
+
 $stmt = $conn->prepare("
     INSERT INTO finance_ledger
         (user_id, ref_type, ref_id, amount, currency, stripe_id, status, created_at)
     VALUES
         (?, ?, ?, ?, ?, ?, 'paid', NOW())
 ");
-
-if (!$stmt) {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'db_prepare_failed']);
-    exit;
-}
 
 $stmt->bind_param(
     'isidss',
@@ -169,16 +180,6 @@ $stmt->bind_param(
 $stmt->execute();
 $stmt->close();
 
-/* ---------------------------------------------------------
- * Done
- * --------------------------------------------------------- */
-echo json_encode([
-    'ok'       => true,
-    'recorded'=> true,
-    'ref'      => $refType,
-    'ref_id'   => $refId,
-    'user_id'  => $userId,
-    'amount'   => $amount
-]);
+echo json_encode(['ok' => true, 'recorded' => true]);
 exit;
 
