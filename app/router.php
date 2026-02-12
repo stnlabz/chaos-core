@@ -45,18 +45,23 @@ if (is_file($lock) || is_file($flag)) {
 }
 
 //------------------------------------------------------------
-// Checkout & Webhooks (before account routes)
+// Checkout API — MUST EXIT BEFORE THEME
 //------------------------------------------------------------
-// /checkout/create-session - API endpoint (no theme)
 if ($first === 'checkout' && isset($segments[1]) && $segments[1] === 'create-session') {
     $api = $docroot . '/app/modules/checkout/api.php';
     if (is_file($api)) {
         require $api;
-        return;
+        exit; // 🔴 CRITICAL — DO NOT FALL THROUGH
     }
+
+    http_response_code(404);
+    echo json_encode(['ok' => false, 'error' => 'checkout_api_missing']);
+    exit;
 }
 
-// /checkout - Main module (with theme)
+//------------------------------------------------------------
+// Checkout main (theme)
+//------------------------------------------------------------
 if ($first === 'checkout') {
     $checkout = $docroot . '/app/modules/checkout/main.php';
     if (is_file($checkout)) {

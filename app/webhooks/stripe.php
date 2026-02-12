@@ -34,6 +34,7 @@ if (!$conn instanceof mysqli) {
 /* ---------------------------------------------------------
  * Load Stripe secrets from DB-backed site settings
  * --------------------------------------------------------- */
+ /**
 $settings = $db->fetch("
     SELECT stripe_secret_key, stripe_webhook_secret
     FROM site_settings
@@ -46,9 +47,35 @@ if (!is_array($settings)) {
     exit;
 }
 
+*/
+$getSetting = static function (mysqli $conn, string $name): string {
+    $stmt = $conn->prepare("SELECT value FROM settings WHERE name=? LIMIT 1");
+    if ($stmt === false) {
+        return '';
+    }
+
+    $stmt->bind_param('s', $name);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $val = '';
+
+    if ($res instanceof mysqli_result) {
+        $row = $res->fetch_assoc();
+        if (is_array($row) && isset($row['value'])) {
+            $val = (string)$row['value'];
+        }
+    }
+
+    $stmt->close();
+    return $val;
+};
+
+$stripeSecret  = trim($getSetting($conn, 'stripe_secret_key'));
+$webhookSecret = trim($getSetting($conn, 'stripe_webhook_secret'));
+/**
 $stripeSecret  = (string)($settings['stripe_secret_key'] ?? '');
 $webhookSecret = (string)($settings['stripe_webhook_secret'] ?? '');
-
+*/
 if ($stripeSecret === '' || $webhookSecret === '') {
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => 'stripe_not_configured']);
