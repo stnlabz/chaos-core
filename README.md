@@ -36,7 +36,7 @@ Architecture, update flow, and runtime behavior are now documented, versioned, a
 
 ### Installer
 - Schema-only database creation (no silent seeding)
-- First user created explicitly as **Admin (role id 4)**
+- First user created explicitly as **Admin**
 - Installer writes config and exits cleanly
 - No magic defaults beyond explicit installer actions
 
@@ -59,10 +59,10 @@ Architecture, update flow, and runtime behavior are now documented, versioned, a
 
 ### Content
 - Posts and Media are now Monetized
-- Topics implemented as global taxonomy
+- Topics implemented as a global taxonomy
 - Posts reference topics via `topic_id`
 - Topic selection already present in post editor
-- `public/plugins/filter` provides default content filtering (pending migration to core)
+- `public/plugins/filter` provides default content filtering (*pending migration to core*)
  
 
 ## Documentation
@@ -76,13 +76,13 @@ Architecture, update flow, and runtime behavior are now documented, versioned, a
 ---
 
 ## Breaking Changes
- - Core theme with user theme override
- - Video upload and playback
+ - core theme with user theme override
+ - video upload and playback
  - enhanced role awareness
  - built in Search Engine Optimization (SEO) xml and AI txt/json generation.
  - Stripe webhook to manage Media and Post Premium and Pro content
- - Automated `SQL` Updating
- - Social aspects of `posts` and `media`
+ - automated `SQL` Updating
+ - social aspects of `posts` and `media`
 ---
 
 ## Known Constraints
@@ -109,5 +109,5 @@ Chaos CMS favors:
 ---
 
 ## Final Note
-This release is a continuance of the the core foundation.  
+This release is a continuation of the core foundation.  
 Future versions will build **on top of this**, not rewrite it.
