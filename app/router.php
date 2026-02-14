@@ -4,13 +4,14 @@ declare(strict_types=1);
 /**
  * Chaos CMS Router
  * Skinny, predictable, explicit routing.
- * 
+ *
  * Route order:
  * 1. Maintenance/Update mode
- * 2. Account routes (login, signup, profile, logout, account)
- * 3. Core modules (home, posts, pages, media)
- * 4. Dynamic modules (DB-gated)
- * 5. 404 (errors module)
+ * 2. Webhooks / API endpoints (NO theme)
+ * 3. Account routes (login, signup, profile, logout, account)
+ * 4. Core modules (home, posts, pages, media)
+ * 5. Dynamic modules (DB-gated)
+ * 6. 404 (errors module)
  */
 
 // ------------------------------------------------------------
@@ -33,27 +34,49 @@ if (is_file($lock) || is_file($flag)) {
     // Allow admin to function during maintenance
     if ($first !== 'admin') {
         http_response_code(503);
-        
+
         if (is_file($maint)) {
             require $maint;
             return;
         }
-        
+
         echo '<h1>Maintenance</h1><p>Site temporarily unavailable.</p>';
         return;
     }
 }
 
 //------------------------------------------------------------
+// Webhooks (NO THEME) — MUST EXIT BEFORE ROUTER FALLTHROUGH
+//------------------------------------------------------------
+// /webhooks/stripe OR /webhooks/stripe.php
+if ($first === 'webhooks' && isset($segments[1])) {
+    $hook = (string)$segments[1];
+    if ($hook === 'stripe' || $hook === 'stripe.php') {
+        $stripeWebhook = $docroot . '/app/webhooks/stripe.php';
+        if (is_file($stripeWebhook)) {
+            require $stripeWebhook;
+            exit;
+        }
+
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(404);
+        echo json_encode(['ok' => false, 'error' => 'webhook_missing']);
+        exit;
+    }
+}
+
+//------------------------------------------------------------
 // Checkout API — MUST EXIT BEFORE THEME
 //------------------------------------------------------------
+// /checkout/create-session
 if ($first === 'checkout' && isset($segments[1]) && $segments[1] === 'create-session') {
     $api = $docroot . '/app/modules/checkout/api.php';
     if (is_file($api)) {
         require $api;
-        exit; // 🔴 CRITICAL — DO NOT FALL THROUGH
+        exit; // CRITICAL — DO NOT FALL THROUGH
     }
 
+    header('Content-Type: application/json; charset=utf-8');
     http_response_code(404);
     echo json_encode(['ok' => false, 'error' => 'checkout_api_missing']);
     exit;
@@ -70,27 +93,17 @@ if ($first === 'checkout') {
     }
 }
 
-// /webhooks/stripe
-if ($first === 'webhooks' && isset($segments[1]) && $segments[1] === 'stripe') {
-    $stripeWebhook = $docroot . '/app/webhooks/stripe.php';
-    if (is_file($stripeWebhook)) {
-        require $stripeWebhook;
-        return;
-    }
-}
-
-
 // ------------------------------------------------------------
 // Account Routes (EXPLICIT - Security Critical)
 // ------------------------------------------------------------
 if (in_array($first, ['login', 'signup', 'profile', 'logout', 'account'], true)) {
     $account = $docroot . '/app/modules/account/main.php';
-    
+
     if (is_file($account)) {
         require $account;
         return;
     }
-    
+
     http_response_code(500);
     echo '<div class="container my-4"><div class="alert alert-danger">Account module missing.</div></div>';
     return;
@@ -112,7 +125,7 @@ $coreSlug = ($first === '' || $first === 'home') ? 'home' : $first;
 if (isset($coreModules[$coreSlug])) {
     foreach ($coreModules[$coreSlug] as $modPath) {
         $fullPath = $docroot . $modPath;
-        
+
         if (is_file($fullPath)) {
             require $fullPath;
             return;
@@ -126,84 +139,84 @@ if (isset($coreModules[$coreSlug])) {
 if ($first !== '' && $first !== 'admin') {
     $pubBase = $docroot . '/public/modules/' . $first;
     $appBase = $docroot . '/app/modules/' . $first;
-    
+
     $pubPhp  = $pubBase . '/main.php';
     $pubMD   = $pubBase . '/main.md';
     $pubJson = $pubBase . '/main.json';
-    
+
     $appPhp  = $appBase . '/main.php';
     $appMD   = $appBase . '/main.md';
     $appJson = $appBase . '/main.json';
-    
+
     // Prefer public, fallback to app
     $modulePhp  = is_file($pubPhp) ? $pubPhp : (is_file($appPhp) ? $appPhp : '');
     $moduleMD   = is_file($pubMD) ? $pubMD : (is_file($appMD) ? $appMD : '');
     $moduleJson = is_file($pubJson) ? $pubJson : (is_file($appJson) ? $appJson : '');
-    
+
     // Check if module is enabled (skip for core modules already handled above)
     $moduleEnabled = false;
-    
+
     if (isset($db) && $db instanceof db) {
         $conn = $db->connect();
-        
+
         if ($conn instanceof mysqli) {
             $stmt = $conn->prepare("SELECT enabled FROM modules WHERE slug=? LIMIT 1");
-            
+
             if ($stmt instanceof mysqli_stmt) {
                 $stmt->bind_param('s', $first);
-                
+
                 if ($stmt->execute()) {
                     $res = $stmt->get_result();
-                    
+
                     if ($res instanceof mysqli_result) {
                         $row = $res->fetch_assoc();
                         $moduleEnabled = is_array($row) && (int)($row['enabled'] ?? 0) === 1;
                     }
                 }
-                
+
                 $stmt->close();
             }
         }
     }
-    
+
     // Load module file if enabled
     if ($modulePhp !== '') {
         if ($moduleEnabled) {
             require $modulePhp;
             return;
         }
-        
+
         http_response_code(403);
         $errorsModule = $docroot . '/app/modules/errors/main.php';
-        
+
         if (is_file($errorsModule)) {
             $_SERVER['ERROR_CODE'] = 403;
             $_SERVER['ERROR_MESSAGE'] = 'Module disabled';
             require $errorsModule;
             return;
         }
-        
+
         echo '<div class="container my-4"><div class="alert alert-warning">Module disabled.</div></div>';
         return;
     }
-    
+
     if ($moduleMD !== '') {
         if ($moduleEnabled) {
             render_markdown($moduleMD);
             return;
         }
-        
+
         http_response_code(403);
         echo '<div class="container my-4"><div class="alert alert-warning">Module disabled.</div></div>';
         return;
     }
-    
+
     if ($moduleJson !== '') {
         if ($moduleEnabled) {
             render_json($moduleJson);
             return;
         }
-        
+
         http_response_code(403);
         echo '<div class="container my-4"><div class="alert alert-warning">Module disabled.</div></div>';
         return;
@@ -232,3 +245,4 @@ echo '<p>The page you requested could not be found.</p>';
 echo '<p><a href="/">Return to home</a></p>';
 echo '</div>';
 echo '</div>';
+
